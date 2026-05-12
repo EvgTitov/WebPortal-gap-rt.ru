@@ -1,0 +1,47 @@
+# Секреты и конфиги
+config.py
+.env
+*.key
+*.pem
+
+# Базы данных
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Загрузки и медиа
+uploads/
+media/
+static/uploads/
+
+# Логи
+*.log
+*.log.*
+
+# Бэкапы
+backups/
+*.zip
+
+# Кэш Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Виртуальное окружение
+venv/
+env/
+ENV/
+.env/
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+desktop.ini
