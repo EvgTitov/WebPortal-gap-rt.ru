@@ -1,10 +1,10 @@
 import ldap3
 from ldap3 import Server, Connection, ALL
 
-LDAP_SERVER = '192.168.7.3'
-LDAP_BASE_DN = 'DC=gap-rt,DC=ru'
-LDAP_USER = 'e.titov@gap-rt.ru'
-LDAP_PASSWORD = 'Jonik997'
+LDAP_SERVER = '*******'
+LDAP_BASE_DN = '******'
+LDAP_USER = '******'
+LDAP_PASSWORD = '******'
 
 def get_all_ad_users():
     try:
