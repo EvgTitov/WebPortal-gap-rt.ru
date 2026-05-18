@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException, Request, Depends, File, UploadFile, 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from ad_auth import authenticate_user
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
@@ -14,6 +15,21 @@ import os
 import shutil
 import json
 import urllib.parse
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import csv
+from io import StringIO, BytesIO
+from dotenv import load_dotenv
+
+# ============ ЗАГРУЗКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ ============
+load_dotenv()
+
+# ============ НАСТРОЙКИ ПОЧТЫ (из .env) ============
+SMTP_SERVER = os.getenv("SMTP_SERVER", "192.168.168.206")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 25))
+SMTP_USER = os.getenv("SMTP_USER", "web-mail")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 
 logger = logging.getLogger("main")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -39,6 +55,48 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 NEWS_DB_PATH = os.path.join(BASE_DIR, "news.db")
 CHAT_DB_PATH = os.path.join(BASE_DIR, "chat.db")
 SETTINGS_DB_PATH = os.path.join(BASE_DIR, "settings.db")
+
+def send_task_email(to_email, to_name, task_title, task_description, due_date, task_id):
+    """Отправка уведомления исполнителю о новой задаче"""
+    if not to_email:
+        logger.warning(f"Email не указан для исполнителя {to_name}")
+        return False
+    
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = SMTP_USER
+        msg['To'] = to_email
+        msg['Subject'] = f"📋 Новая IT-задача: {task_title}"
+        
+        body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif;">
+        <h2>Уважаемый(ая) {to_name}!</h2>
+        <p>Вам назначена новая задача в корпоративном портале.</p>
+        <hr>
+        <h3>📌 Задача: {task_title}</h3>
+        <p><strong>📝 Описание:</strong> {task_description or 'Не указано'}</p>
+        <p><strong>⏰ Срок выполнения:</strong> {due_date or 'Не указан'}</p>
+        <hr>
+        <p>Ссылка на портал: <a href="https://srv-app16.gap-rt.ru">Портал gap-rt.ru</a></p>
+        <p>ID задачи: #{task_id}</p>
+        <hr>
+        <p style="color: #666; font-size: 12px;">Это автоматическое уведомление. Пожалуйста, не отвечайте на него.</p>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(body, 'html'))
+        
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        logger.info(f"Email отправлен исполнителю {to_name} на {to_email}")
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка отправки email исполнителю: {e}")
+        return False
 
 def init_news_db():
     conn = sqlite3.connect(NEWS_DB_PATH)
@@ -259,6 +317,7 @@ def init_settings_db():
         due_date TEXT,
         completed_date TEXT,
         is_archived INTEGER DEFAULT 0,
+        assigned_email TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (category_id) REFERENCES task_categories(id) ON DELETE SET NULL,
         FOREIGN KEY (equipment_id) REFERENCES equipment_types(id) ON DELETE SET NULL
@@ -276,8 +335,10 @@ def init_settings_db():
             ('tasks.edit', 'Редактирование задач', 'it_tasks'),
             ('tasks.delete', 'Удаление задач', 'it_tasks'),
             ('tasks.archive', 'Архивирование задач', 'it_tasks'),
+            ('tasks.restore', 'Восстановление из архива', 'it_tasks'),
             ('equipment.view', 'Просмотр комплектующих', 'it_tasks'),
             ('equipment.manage', 'Управление комплектующими', 'it_tasks'),
+            ('reports.view', 'Просмотр отчетов', 'reports'),
         ]
         for perm_key, display_name, module in it_permissions:
             c.execute("INSERT OR IGNORE INTO permissions (permission_key, display_name, module) VALUES (?, ?, ?)", 
@@ -434,7 +495,7 @@ def migrate_db():
 
     try:
         c.execute("ALTER TABLE it_tasks ADD COLUMN equipment_id INTEGER")
-        c.execute("ALTER TABLE it_tasks ADD FOREIGN KEY (equipment_id) REFERENCES equipment_types(id) ON DELETE SET NULL")
+        c.execute("ALTER TABLE it_tasks ADD COLUMN assigned_email TEXT")
     except: pass
 
     conn.commit()
@@ -519,6 +580,18 @@ async def has_permission(username: str, permission_key: str, user_groups: list =
     result = c.fetchone()
     conn.close()
     return result is not None
+
+def get_user_email_by_name(username: str) -> str:
+    """Получить email пользователя по имени"""
+    from server.ad_users import get_all_ad_users
+    try:
+        all_users = get_all_ad_users()
+        for user in all_users:
+            if user.get('name') == username or user.get('username') == username:
+                return user.get('email', '')
+    except:
+        pass
+    return ""
 
 # ============ ЛОГИН ============
 @app.post("/api/auth/login", response_model=LoginResponse)
@@ -1025,11 +1098,8 @@ async def assign_user_role(username: str, role_name: str = Form(...), current_us
     return {"message": f"Роль {role_name} назначена пользователю {username}"}
 
 @app.get("/api/admin/ad-users")
-async def search_ad_users(query: str = "", limit: int = 100000, current_user: dict = Depends(get_current_user)):
-    username = current_user.get("sub")
-    user_groups = current_user.get("groups", [])
-    if not await has_permission(username, "users.manage", user_groups):
-        raise HTTPException(status_code=403, detail="Forbidden")
+async def search_ad_users(query: str = "", limit: int = 100, current_user: dict = Depends(get_current_user)):
+    """Поиск пользователей в AD - доступен всем авторизованным пользователям"""
     from server.ad_users import get_all_ad_users
     try:
         all_users = get_all_ad_users()
@@ -1055,6 +1125,53 @@ async def search_ad_users(query: str = "", limit: int = 100000, current_user: di
         logger.error(f"Search error: {e}")
         return {"users": [], "total": 0, "error": str(e)}
 
+# ============ НОВЫЙ ЭНДПОИНТ: ПОИСК ТОЛЬКО СРЕДИ АВТОРИЗОВАННЫХ ПОЛЬЗОВАТЕЛЕЙ ============
+@app.get("/api/users/authorized")
+async def get_authorized_users(query: str = "", limit: int = 50, current_user: dict = Depends(get_current_user)):
+    """Поиск только среди пользователей, которые авторизовались на портале"""
+    import urllib.parse
+    conn = get_db()
+    c = conn.cursor()
+    
+    # Декодируем query
+    try:
+        query = urllib.parse.unquote(query)
+    except:
+        pass
+    
+    # Получаем всех пользователей
+    users = c.execute("""
+        SELECT username, name as display_name, '' as email 
+        FROM users 
+        ORDER BY name
+    """).fetchall()
+    
+    conn.close()
+    
+    result = []
+    if query and query.strip():
+        query_lower = query.lower().strip()
+        for user in users:
+            username = user[0].lower()
+            display_name = (user[1] or user[0]).lower()
+            if query_lower in username or query_lower in display_name:
+                result.append({
+                    "username": user[0],
+                    "display_name": user[1] or user[0],
+                    "email": user[2]
+                })
+                if len(result) >= limit:
+                    break
+    else:
+        for user in users[:limit]:
+            result.append({
+                "username": user[0],
+                "display_name": user[1] or user[0],
+                "email": user[2]
+            })
+    
+    return {"users": result}
+    
 # ============ УПРАВЛЕНИЕ КАТЕГОРИЯМИ РЕСУРСОВ ============
 @app.get("/api/admin/resource-categories")
 async def get_all_categories(current_user: dict = Depends(get_current_user)):
@@ -1416,18 +1533,35 @@ async def get_user_it_tasks(archived: bool = False, current_user: dict = Depends
     username = current_user.get("sub")
     user_groups = current_user.get("groups", [])
     user_role = await get_user_role(username)
+    
+    # Проверка доступа
     if user_role not in ['admin', 'it_engineer'] and not is_admin_by_group(user_groups):
         raise HTTPException(status_code=403, detail="Forbidden")
+    
     conn = get_settings_db()
     c = conn.cursor()
-    tasks = [dict(row) for row in c.execute("""
-        SELECT t.*, tc.name as category_name, tc.color as category_color, et.name as equipment_name
-        FROM it_tasks t
-        LEFT JOIN task_categories tc ON t.category_id = tc.id
-        LEFT JOIN equipment_types et ON t.equipment_id = et.id
-        WHERE t.is_archived = ?
-        ORDER BY t.created_date DESC
-    """, (1 if archived else 0,)).fetchall()]
+    
+    # Для администратора показываем все задачи
+    if user_role == 'admin' or is_admin_by_group(user_groups):
+        tasks = [dict(row) for row in c.execute("""
+            SELECT t.*, tc.name as category_name, tc.color as category_color, et.name as equipment_name
+            FROM it_tasks t
+            LEFT JOIN task_categories tc ON t.category_id = tc.id
+            LEFT JOIN equipment_types et ON t.equipment_id = et.id
+            WHERE t.is_archived = ?
+            ORDER BY t.created_date DESC
+        """, (1 if archived else 0,)).fetchall()]
+    else:
+        # Для IT-инженера — только его задачи (где он исполнитель)
+        tasks = [dict(row) for row in c.execute("""
+            SELECT t.*, tc.name as category_name, tc.color as category_color, et.name as equipment_name
+            FROM it_tasks t
+            LEFT JOIN task_categories tc ON t.category_id = tc.id
+            LEFT JOIN equipment_types et ON t.equipment_id = et.id
+            WHERE t.is_archived = ? AND t.executor = ?
+            ORDER BY t.created_date DESC
+        """, (1 if archived else 0, username)).fetchall()]
+    
     conn.close()
     return {"tasks": tasks}
 
@@ -1450,15 +1584,28 @@ async def create_it_task(
         raise HTTPException(status_code=403, detail="Forbidden")
     conn = get_settings_db()
     c = conn.cursor()
+    
+    # Email отправляется ТОЛЬКО исполнителю
+    executor_email = None
+    if executor:
+        executor_email = get_user_email_by_name(executor)
+    
     c.execute("""
         INSERT INTO it_tasks (title, description, category_id, equipment_id, assigned_to, 
-                              components_status, executor, created_by, created_date, due_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              components_status, executor, created_by, created_date, due_date, assigned_email)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (title, description, category_id, equipment_id, assigned_to, 
-          components_status, executor, username, dt.now().isoformat(), due_date))
+          components_status, executor, username, dt.now().isoformat(), due_date, executor_email))
     task_id = c.lastrowid
     conn.commit()
     conn.close()
+    
+    # Отправляем email ТОЛЬКО исполнителю, если указан и email найден
+    if executor and executor_email:
+        send_task_email(executor_email, executor, title, description, due_date, task_id)
+    elif executor and not executor_email:
+        logger.warning(f"Не удалось найти email для исполнителя: {executor}")
+    
     return {"id": task_id, "message": "Задача создана"}
 
 @app.put("/api/it-tasks/{task_id}")
@@ -1498,6 +1645,10 @@ async def update_it_task(
         updates.append("components_status = ?"); values.append(components_status)
     if executor is not None:
         updates.append("executor = ?"); values.append(executor)
+        if executor:
+            executor_email = get_user_email_by_name(executor)
+            if executor_email:
+                updates.append("assigned_email = ?"); values.append(executor_email)
     if due_date is not None:
         updates.append("due_date = ?"); values.append(due_date)
     if is_archived is not None:
@@ -1510,6 +1661,22 @@ async def update_it_task(
         conn.commit()
     conn.close()
     return {"message": "Задача обновлена"}
+
+@app.post("/api/it-tasks/{task_id}/restore")
+async def restore_it_task(task_id: int, current_user: dict = Depends(get_current_user)):
+    """Восстановление задачи из архива"""
+    username = current_user.get("sub")
+    user_groups = current_user.get("groups", [])
+    user_role = await get_user_role(username)
+    if user_role not in ['admin', 'it_engineer'] and not is_admin_by_group(user_groups):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    c.execute("UPDATE it_tasks SET is_archived = 0, completed_date = NULL WHERE id = ?", (task_id,))
+    conn.commit()
+    conn.close()
+    return {"message": "Задача восстановлена из архива"}
 
 @app.delete("/api/it-tasks/{task_id}")
 async def delete_it_task(task_id: int, current_user: dict = Depends(get_current_user)):
@@ -1524,6 +1691,97 @@ async def delete_it_task(task_id: int, current_user: dict = Depends(get_current_
     conn.commit()
     conn.close()
     return {"message": "Задача удалена"}
+
+@app.post("/api/it-tasks/report")
+async def generate_tasks_report(
+    start_date: str = Form(...),
+    end_date: str = Form(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Генерация отчета по задачам за период в формате Excel"""
+    username = current_user.get("sub")
+    user_groups = current_user.get("groups", [])
+    user_role = await get_user_role(username)
+    if user_role not in ['admin', 'it_engineer'] and not is_admin_by_group(user_groups):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    
+    tasks = c.execute("""
+        SELECT t.*, tc.name as category_name
+        FROM it_tasks t
+        LEFT JOIN task_categories tc ON t.category_id = tc.id
+        WHERE date(t.created_date) >= ? AND date(t.created_date) <= ?
+        ORDER BY t.created_date DESC
+    """, (start_date, end_date)).fetchall()
+    
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from openpyxl.utils import get_column_letter
+    from io import BytesIO
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Отчет по задачам"
+    
+    headers = ['ID', 'Название', 'Описание', 'Категория', 'Кому', 'Email', 'Исполнитель', 
+               'Статус комплектующих', 'Дата создания', 'Срок', 'Дата выполнения', 'Архив']
+    
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="3b82f6", end_color="3b82f6", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+    
+    for row_idx, task in enumerate(tasks, 2):
+        task_dict = dict(task)
+        ws.cell(row=row_idx, column=1, value=task_dict.get('id', ''))
+        ws.cell(row=row_idx, column=2, value=task_dict.get('title', ''))
+        ws.cell(row=row_idx, column=3, value=task_dict.get('description', '') or '')
+        ws.cell(row=row_idx, column=4, value=task_dict.get('category_name', '') or '')
+        ws.cell(row=row_idx, column=5, value=task_dict.get('assigned_to', '') or '')
+        ws.cell(row=row_idx, column=6, value=task_dict.get('assigned_email', '') or '')
+        ws.cell(row=row_idx, column=7, value=task_dict.get('executor', '') or '')
+        
+        status = task_dict.get('components_status', '')
+        status_text = {'available': 'Есть', 'partial': 'Не полный', 'missing': 'Нет'}.get(status, status)
+        ws.cell(row=row_idx, column=8, value=status_text)
+        
+        ws.cell(row=row_idx, column=9, value=task_dict.get('created_date', '') or '')
+        ws.cell(row=row_idx, column=10, value=task_dict.get('due_date', '') or '')
+        ws.cell(row=row_idx, column=11, value=task_dict.get('completed_date', '') or '')
+        ws.cell(row=row_idx, column=12, value='Да' if task_dict.get('is_archived') else 'Нет')
+    
+    for col_idx in range(1, len(headers) + 1):
+        max_length = 0
+        col_letter = get_column_letter(col_idx)
+        for row_idx in range(1, len(tasks) + 2):
+            cell_value = ws.cell(row=row_idx, column=col_idx).value
+            if cell_value:
+                try:
+                    if len(str(cell_value)) > max_length:
+                        max_length = len(str(cell_value))
+                except:
+                    pass
+        adjusted_width = min(max_length + 2, 50)
+        ws.column_dimensions[col_letter].width = adjusted_width
+    
+    ws.freeze_panes = 'A2'
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=tasks_report_{start_date}_{end_date}.xlsx"}
+    )
 
 @app.get("/api/task-categories")
 async def get_task_categories_public(current_user: dict = Depends(get_current_user)):
@@ -1548,7 +1806,8 @@ async def get_equipment_types(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Forbidden")
     conn = get_settings_db()
     c = conn.cursor()
-    types = [dict(row) for row in c.execute("SELECT * FROM equipment_types ORDER BY category, name").fetchall()]
+    c.execute("SELECT * FROM equipment_types ORDER BY name ASC")
+    types = [dict(row) for row in c.fetchall()]
     conn.close()
     return {"types": types}
 
