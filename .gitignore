@@ -46,3 +46,4 @@ ENV/
 Thumbs.db
 desktop.ini
 backend/ad_auth.py
+backend/server/ad_users.py
