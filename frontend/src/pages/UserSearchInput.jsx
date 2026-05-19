@@ -1,11 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
 
+let requestCounter = 0;
+let lastRequest = { query: "", time: 0 };
+
 const UserSearchInput = ({ value, onChange, placeholder, getToken }) => {
   const [searchTerm, setSearchTerm] = useState(value || "");
   const [results, setResults] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const wrapperRef = useRef(null);
+  const timeoutRef = useRef(null);
+
+  useEffect(() => {
+    setSearchTerm(value || "");
+  }, [value]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -17,28 +25,36 @@ const UserSearchInput = ({ value, onChange, placeholder, getToken }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    const delayDebounce = setTimeout(() => {
-      if (searchTerm.length >= 2) {
-        searchUsers(searchTerm);
-      } else {
-        setResults([]);
-        setIsOpen(false);
-      }
-    }, 300);
-    return () => clearTimeout(delayDebounce);
-  }, [searchTerm]);
-
   const searchUsers = async (query) => {
+    if (!query || query.length < 2) return;
+    
+    // Защита от дублей
+    const now = Date.now();
+    if (lastRequest.query === query && now - lastRequest.time < 500) {
+      console.log("🛑 Пропускаем дубликат запроса:", query);
+      return;
+    }
+    
+    lastRequest = { query, time: now };
+    requestCounter++;
+    const currentRequest = requestCounter;
+    
     setLoading(true);
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/admin/ad-users?query=${encodeURIComponent(query)}&limit=10`, {
+      const res = await fetch(`/api/users/authorized?query=${encodeURIComponent(query)}&limit=10`, {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
+      
+      // Если за это время был новый запрос, игнорируем старый
+      if (currentRequest !== requestCounter) {
+        console.log("🛑 Игнорируем устаревший запрос");
+        return;
+      }
+      
       const data = await res.json();
-      if (res.ok) {
-        setResults(data.users || []);
-        setIsOpen(true);
+      if (res.ok && data.users) {
+        setResults(data.users);
+        setIsOpen(data.users.length > 0);
       }
     } catch (err) {
       console.error(err);
@@ -46,11 +62,34 @@ const UserSearchInput = ({ value, onChange, placeholder, getToken }) => {
     setLoading(false);
   };
 
+  const handleInputChange = (e) => {
+    const newValue = e.target.value;
+    setSearchTerm(newValue);
+    onChange(newValue);
+    
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    
+    if (newValue.length >= 2) {
+      timeoutRef.current = setTimeout(() => {
+        searchUsers(newValue);
+      }, 400);
+    } else {
+      setResults([]);
+      setIsOpen(false);
+    }
+  };
+
   const selectUser = (user) => {
-    setSearchTerm(user.display_name || user.username);
-    onChange(user.display_name || user.username);
+    const displayName = user.display_name || user.username;
+    
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    
+    setSearchTerm(displayName);
+    onChange(displayName);
     setIsOpen(false);
     setResults([]);
+    // Сбрасываем защиту от дублей
+    lastRequest = { query: "", time: 0 };
   };
 
   const styles = {
@@ -63,8 +102,7 @@ const UserSearchInput = ({ value, onChange, placeholder, getToken }) => {
       fontSize: 13,
       marginBottom: 12,
       boxSizing: "border-box",
-      outline: "none",
-      transition: "border-color 0.2s"
+      outline: "none"
     },
     dropdown: {
       position: "absolute",
@@ -93,9 +131,9 @@ const UserSearchInput = ({ value, onChange, placeholder, getToken }) => {
         type="text"
         placeholder={placeholder}
         value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
+        onChange={handleInputChange}
         style={styles.input}
-        onFocus={() => searchTerm.length >= 2 && searchUsers(searchTerm)}
+        autoComplete="off"
       />
       {isOpen && results.length > 0 && (
         <div style={styles.dropdown}>

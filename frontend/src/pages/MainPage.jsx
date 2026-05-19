@@ -3,6 +3,7 @@ import { useAuth } from "../auth/AuthContext";
 import AdminPanel from "./AdminPanel";
 import ITTasks from "./ITTasks";
 import ITEquipment from "./ITEquipment";
+import UserSearchInput from "../components/UserSearchInput";
 import { 
   LayoutDashboard, Newspaper, Calendar, MessageSquare, 
   LogOut, Plus, Edit2, Trash2, X, Sun, Moon,
@@ -15,7 +16,7 @@ import {
 } from "lucide-react";
 
 const MainPage = () => {
-  const { user, isAuthenticated, token } = useAuth();
+  const { user, isAuthenticated, token, userRole, isAdmin, isITEngineer, isDepartmentHead, isModerator } = useAuth();
   const [message, setMessage] = useState({ text: "", type: "success" });
   const [news, setNews] = useState([]);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
@@ -67,7 +68,7 @@ const MainPage = () => {
   const [darkMode, setDarkMode] = useState(false);
   const [userServices, setUserServices] = useState([]);
   const [userNetworkCategories, setUserNetworkCategories] = useState([]);
-  const [userRole, setUserRole] = useState("user");
+  // const [userRole, setUserRole] = useState("user"); // удалено, используем из useAuth()
   const [copiedPath, setCopiedPath] = useState(null);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -82,6 +83,41 @@ const MainPage = () => {
 
   const notesEmojiPickerRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // Функция для валидации даты в формате ДД.ММ.ГГГГ для замен
+  const handleReplacementDateChange = (value, field) => {
+    let cleaned = value.replace(/\D/g, "");
+    if (cleaned.length > 8) {
+      cleaned = cleaned.slice(0, 8);
+    }
+    
+    let formatted = "";
+    if (cleaned.length >= 3) {
+      formatted = `${cleaned.slice(0, 2)}.${cleaned.slice(2, 4)}`;
+      if (cleaned.length >= 5) {
+        formatted += `.${cleaned.slice(4, 8)}`;
+      }
+    } else if (cleaned.length > 0) {
+      formatted = cleaned;
+    }
+    
+    if (formatted.length >= 2) {
+      const day = parseInt(formatted.slice(0, 2));
+      if (day < 1 || day > 31) return;
+    }
+    
+    if (formatted.length >= 5) {
+      const month = parseInt(formatted.slice(3, 5));
+      if (month < 1 || month > 12) return;
+    }
+    
+    if (formatted.length === 10) {
+      const year = parseInt(formatted.slice(6, 10));
+      if (year < 2000 || year > 2030) return;
+    }
+    
+    setReplacementForm({ ...replacementForm, [field]: formatted });
+  };
 
   const getEventIcon = (type) => {
     if (type === "meeting") return "👥";
@@ -149,7 +185,7 @@ const MainPage = () => {
   const fetchUserRole = async () => {
     try {
       const authToken = getToken();
-      const res = await fetch("http://192.168.7.103:8000/api/admin/user-role", {
+      const res = await fetch("/api/admin/user-role", {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       const data = await res.json();
@@ -164,7 +200,7 @@ const MainPage = () => {
   const fetchAdGroups = async () => {
     try {
       const authToken = getToken();
-      const res = await fetch("http://192.168.7.103:8000/api/admin/groups", {
+      const res = await fetch("/api/admin/groups", {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       const data = await res.json();
@@ -179,7 +215,7 @@ const MainPage = () => {
   const fetchAllAdUsers = async () => {
     try {
       const authToken = getToken();
-      const res = await fetch("http://192.168.7.103:8000/api/admin/ad-users?query=&limit=500", {
+      const res = await fetch("/api/users/authorized?query=&limit=500", {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       const data = await res.json();
@@ -206,17 +242,26 @@ const MainPage = () => {
     return false;
   };
 
-  const hasAdminAccess = isInCitovmtGroup() || userRole === "admin";
+  const hasAdminAccess = userRole === "admin" || isInCitovmtGroup();
 
   const currentUsername = user?.username || "current";
   const currentUserDisplayName = user?.display_name || user?.username || "Пользователь";
   const unreadCount = notifications.filter(n => !n.read).length;
   const unreadCalendarNotificationsCount = calendarEventNotifications.filter(n => !n.read).length;
 
+  const getRoleDisplayName = () => {
+    if (userRole === "admin") return "⚙️ Администратор";
+    if (userRole === "department_head") return "👑 Начальник отдела";
+    if (userRole === "moderator") return "🛡️ Модератор";
+    if (userRole === "it_engineer") return "🔧 IT-инженер";
+    if (hasAdminAccess) return "Администратор";
+    return "👤 Сотрудник";
+  };
+
   const loadUserServices = async () => {
     try {
       const authToken = getToken();
-      const res = await fetch("http://192.168.7.103:8000/api/services", {
+      const res = await fetch("/api/services", {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       if (res.ok) {
@@ -231,7 +276,7 @@ const MainPage = () => {
   const loadUserNetworkResources = async () => {
     try {
       const authToken = getToken();
-      const res = await fetch("http://192.168.7.103:8000/api/network-resources", {
+      const res = await fetch("/api/network-resources", {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       if (res.ok) {
@@ -246,7 +291,7 @@ const MainPage = () => {
   const loadNews = async () => {
     setIsLoadingNews(true);
     try {
-      const res = await fetch("http://192.168.7.103:8000/api/news?limit=20");
+      const res = await fetch("/api/news?limit=20");
       const data = await res.json();
       if (data.news) setNews(data.news);
     } catch (err) { console.error(err); }
@@ -256,7 +301,7 @@ const MainPage = () => {
   const loadVacationReplacements = async () => {
     try {
       const authToken = getToken();
-      const res = await fetch("http://192.168.7.103:8000/api/vacation-replacements", {
+      const res = await fetch("/api/vacation-replacements", {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       const data = await res.json();
@@ -309,21 +354,30 @@ const MainPage = () => {
   };
 
   const loadNotifications = async () => {
-    try {
-      const authToken = getToken();
-      const res = await fetch("http://192.168.7.103:8000/api/notifications", {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setNotifications(data.notifications || []);
-      }
-    } catch (err) {
-      console.error("Error loading notifications:", err);
+  try {
+    const authToken = getToken();
+    const res = await fetch("/api/notifications", {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      // Загружаем сохранённые прочитанные статусы из localStorage
       const saved = localStorage.getItem(`notifications_${currentUsername}`);
-      if (saved) setNotifications(JSON.parse(saved));
+      const savedNotifications = saved ? JSON.parse(saved) : [];
+      const readIds = savedNotifications.filter(n => n.read).map(n => n.id);
+      
+      const notificationsWithReadStatus = (data.notifications || []).map(n => ({
+        ...n,
+        read: readIds.includes(n.id)
+      }));
+      setNotifications(notificationsWithReadStatus);
     }
-  };
+  } catch (err) {
+    console.error("Error loading notifications:", err);
+    const saved = localStorage.getItem(`notifications_${currentUsername}`);
+    if (saved) setNotifications(JSON.parse(saved));
+  }
+};
 
   const sendNotification = async () => {
     if (!notificationText.trim()) {
@@ -336,7 +390,7 @@ const MainPage = () => {
     formData.append("text", notificationText);
 
     try {
-      const res = await fetch("http://192.168.7.103:8000/api/admin/notifications", {
+      const res = await fetch("/api/admin/notifications", {
         method: "POST",
         headers: { Authorization: `Bearer ${authToken}` },
         body: formData
@@ -359,7 +413,7 @@ const MainPage = () => {
     
     const authToken = getToken();
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/admin/notifications/${id}`, {
+      const res = await fetch(`/api/admin/notifications/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${authToken}` }
       });
@@ -375,36 +429,37 @@ const MainPage = () => {
     }
   };
 
-  const markAsRead = (id) => {
-    const updated = notifications.map(n => n.id === id ? { ...n, read: true } : n);
-    setNotifications(updated);
-    localStorage.setItem(`notifications_${currentUsername}`, JSON.stringify(updated));
-  };
+const markAsRead = (id) => {
+  const updated = notifications.map(n => n.id === id ? { ...n, read: true } : n);
+  setNotifications(updated);
+  // Сохраняем в localStorage
+  localStorage.setItem(`notifications_${currentUsername}`, JSON.stringify(updated));
+};
 
-  const markAllAsRead = () => {
-    const updated = notifications.map(n => ({ ...n, read: true }));
-    setNotifications(updated);
-    localStorage.setItem(`notifications_${currentUsername}`, JSON.stringify(updated));
-    showMessage("✅ Все оповещения прочитаны");
-  };
+const markAllAsRead = () => {
+  const updated = notifications.map(n => ({ ...n, read: true }));
+  setNotifications(updated);
+  localStorage.setItem(`notifications_${currentUsername}`, JSON.stringify(updated));
+  showMessage("✅ Все оповещения прочитаны");
+};
 
-  const markCalendarNotificationAsRead = (id) => {
-    const updated = calendarEventNotifications.map(n => n.id === id ? { ...n, read: true } : n);
-    setCalendarEventNotifications(updated);
-    localStorage.setItem(`calendarNotifications_${currentUsername}`, JSON.stringify(updated));
-  };
+const markCalendarNotificationAsRead = (id) => {
+  const updated = calendarEventNotifications.map(n => n.id === id ? { ...n, read: true } : n);
+  setCalendarEventNotifications(updated);
+  localStorage.setItem(`calendarNotifications_${currentUsername}`, JSON.stringify(updated));
+};
 
-  const markAllCalendarNotificationsAsRead = () => {
-    const updated = calendarEventNotifications.map(n => ({ ...n, read: true }));
-    setCalendarEventNotifications(updated);
-    localStorage.setItem(`calendarNotifications_${currentUsername}`, JSON.stringify(updated));
-    showMessage("✅ Все уведомления о событиях прочитаны");
-  };
+const markAllCalendarNotificationsAsRead = () => {
+  const updated = calendarEventNotifications.map(n => ({ ...n, read: true }));
+  setCalendarEventNotifications(updated);
+  localStorage.setItem(`calendarNotifications_${currentUsername}`, JSON.stringify(updated));
+  showMessage("✅ Все уведомления о событиях прочитаны");
+};
 
   const loadCalendarEvents = async () => {
     try {
       const authToken = getToken();
-      const res = await fetch("http://192.168.7.103:8000/api/calendar/events", {
+      const res = await fetch("/api/calendar/events", {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       if (res.ok) {
@@ -467,8 +522,8 @@ const MainPage = () => {
     formData.append("participants", JSON.stringify(eventForm.participants));
 
     const url = editingEvent
-      ? `http://192.168.7.103:8000/api/calendar/events/${editingEvent.id}`
-      : "http://192.168.7.103:8000/api/calendar/events";
+      ? `/api/calendar/events/${editingEvent.id}`
+      : "/api/calendar/events";
     const method = editingEvent ? "PUT" : "POST";
 
     try {
@@ -514,7 +569,7 @@ const MainPage = () => {
     }
     
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/calendar/events/${id}`, {
+      const res = await fetch(`/api/calendar/events/${id}`, {
         method: "DELETE",
         headers: { 
           Authorization: `Bearer ${authToken}`,
@@ -650,7 +705,7 @@ const MainPage = () => {
     }
     try {
       const authToken = getToken();
-      const res = await fetch(`http://192.168.7.103:8000/api/admin/ad-users?query=${encodeURIComponent(query)}&limit=10`, {
+      const res = await fetch(`/api/users/authorized?query=${encodeURIComponent(query)}&limit=10`, {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       const data = await res.json();
@@ -825,7 +880,7 @@ const MainPage = () => {
     formData.append("reason", replacementForm.reason || "");
 
     try {
-      const res = await fetch("http://192.168.7.103:8000/api/vacation-replacements", {
+      const res = await fetch("/api/vacation-replacements", {
         method: "POST",
         headers: { Authorization: `Bearer ${authToken}` },
         body: formData
@@ -848,7 +903,7 @@ const MainPage = () => {
     
     const authToken = getToken();
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/vacation-replacements/${id}`, {
+      const res = await fetch(`/api/vacation-replacements/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${authToken}` }
       });
@@ -871,7 +926,7 @@ const MainPage = () => {
   const loadOrganizationTree = async () => {
     try {
       const authToken = getToken();
-      const res = await fetch("http://192.168.7.103:8000/api/admin/organization-tree", {
+      const res = await fetch("/api/admin/organization-tree", {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       const data = await res.json();
@@ -891,7 +946,7 @@ const MainPage = () => {
   const saveOrganizationTree = async (tree) => {
     try {
       const authToken = getToken();
-      const response = await fetch("http://192.168.7.103:8000/api/admin/organization-tree", {
+      const response = await fetch("/api/admin/organization-tree", {
         method: "POST",
         headers: { 
           Authorization: `Bearer ${authToken}`,
@@ -998,7 +1053,7 @@ const MainPage = () => {
   };
 
   const renderImageGallery = (images, darkMode) => {
-    const fullUrls = images.map(img => `http://192.168.7.103:8000${img}`);
+    const fullUrls = images.map(img => `${img}`);
     const count = images.length;
     
     if (count === 1) {
@@ -1083,7 +1138,7 @@ const MainPage = () => {
     });
 
     try {
-      const res = await fetch("http://192.168.7.103:8000/api/news", {
+      const res = await fetch("/api/news", {
         method: "POST",
         headers: { Authorization: `Bearer ${authToken}` },
         body: formData
@@ -1123,7 +1178,7 @@ const MainPage = () => {
     });
 
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/news/${editingNews.id}`, {
+      const res = await fetch(`/api/news/${editingNews.id}`, {
         method: "PUT",
         headers: { Authorization: `Bearer ${authToken}` },
         body: formData
@@ -1163,7 +1218,7 @@ const MainPage = () => {
     if (!confirm("Удалить новость?")) return;
     const authToken = getToken();
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/news/${id}`, { 
+      const res = await fetch(`/api/news/${id}`, { 
         method: "DELETE", 
         headers: { Authorization: `Bearer ${authToken}` } 
       });
@@ -2076,8 +2131,12 @@ const MainPage = () => {
             </div>
             {sidebarOpen && (
               <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: darkMode ? "#f1f5f9" : "#1e293b" }}>{currentUserDisplayName}</div>
-                <div style={{ fontSize: 11, color: darkMode ? "#94a3b8" : "#64748b" }}>{hasAdminAccess ? "Администратор" : "Сотрудник"}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: darkMode ? "#f1f5f9" : "#1e293b" }}>
+                  {currentUserDisplayName}
+                </div>
+                <div style={{ fontSize: 11, color: darkMode ? "#94a3b8" : "#64748b" }}>
+                  {getRoleDisplayName()}
+                </div>
               </div>
             )}
           </div>
@@ -2188,24 +2247,64 @@ const MainPage = () => {
           {activeTab === "calendar" && (
             <div style={styles.calendarContainer}>
               <div style={styles.calendarHeader}>
-                <button onClick={prevMonth} style={styles.calendarNavBtn}><ChevronLeft size={20} /></button>
-                <span style={styles.calendarMonth}>{currentMonth.toLocaleString("ru-RU", { month: "long", year: "numeric" })}</span>
-                <button onClick={nextMonth} style={styles.calendarNavBtn}><ChevronRight size={20} /></button>
+                <button onClick={prevMonth} style={styles.calendarNavBtn}>
+                  <ChevronLeft size={20} />
+                </button>
+                <span style={styles.calendarMonth}>
+                  {currentMonth.toLocaleString("ru-RU", { month: "long", year: "numeric" })}
+                </span>
+                <button onClick={nextMonth} style={styles.calendarNavBtn}>
+                  <ChevronRight size={20} />
+                </button>
               </div>
-              <div style={styles.calendarWeekdays}>{["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"].map(day => <div key={day} style={styles.calendarWeekday}>{day}</div>)}</div>
-              <div style={styles.calendarDays}>{renderCalendar()}</div>
-              <div style={{ padding: 16, borderTop: darkMode ? "1px solid #334155" : "1px solid #e2e8f0", fontSize: 13, color: "#64748b" }}>💡 Кликните по дате для добавления события, по событию для просмотра</div>
+              <div style={styles.calendarWeekdays}>
+                {["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"].map(day => (
+                  <div key={day} style={styles.calendarWeekday}>{day}</div>
+                ))}
+              </div>
+              <div style={styles.calendarDays}>
+                {renderCalendar()}
+              </div>
+              <div style={{ padding: 16, borderTop: "1px solid #e2e8f0", fontSize: 13, color: "#64748b" }}>
+                💡 Кликните по дате для добавления события, по событию для просмотра
+              </div>
             </div>
           )}
 
           {activeTab === "chat" && (
-            <div style={{ ...styles.newsCard, height: "calc(100vh - 140px)" }}>
-              <iframe 
-                src="http://192.168.7.103:3000/home?language=ru"
-                style={{ width: "100%", height: "100%", border: "none" }} 
-                title="Rocket.Chat" 
-                allow="microphone; camera" 
-              />
+            <div style={{ ...styles.newsCard, padding: 60, textAlign: "center" }}>
+              <MessageSquare size={64} style={{ marginBottom: 20, opacity: 0.5, color: darkMode ? "#64748b" : "#94a3b8" }} />
+              <h3 style={{ marginBottom: 16, fontSize: 20, fontWeight: 600, color: darkMode ? "#f1f5f9" : "#1e293b" }}>
+                Корпоративный чат
+              </h3>
+              <p style={{ marginBottom: 32, color: "#64748b", maxWidth: 400, marginLeft: "auto", marginRight: "auto" }}>
+                Rocket.Chat — корпоративный мессенджер для общения
+              </p>
+              <button
+                onClick={() => window.open("http://192.168.7.103:3000/home?language=ru", "_blank")}
+                style={{
+                  background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+                  color: "white",
+                  border: "none",
+                  padding: "14px 32px",
+                  borderRadius: 12,
+                  cursor: "pointer",
+                  fontSize: 15,
+                  fontWeight: 500,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 10,
+                  boxShadow: "0 4px 12px rgba(59,130,246,0.3)",
+                  transition: "all 0.2s"
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-2px)"}
+                onMouseLeave={(e) => e.currentTarget.style.transform = "translateY(0)"}
+              >
+                <MessageSquare size={20} /> Открыть чат
+              </button>
+              <p style={{ marginTop: 24, fontSize: 12, color: "#64748b" }}>
+                
+              </p>
             </div>
           )}
 
@@ -2359,7 +2458,7 @@ const MainPage = () => {
                   {editingNewsImages.map((img, idx) => (
                     <div key={idx} style={{ position: "relative", width: 120 }}>
                       <img 
-                        src={`http://192.168.7.103:8000${img}`} 
+                        src={`${img}`} 
                         alt={`Текущее ${idx + 1}`} 
                         style={{ width: "100%", height: 100, objectFit: "cover", borderRadius: 8, background: "#f1f5f9" }} 
                       />
@@ -2537,11 +2636,41 @@ const MainPage = () => {
             </div>
             <input type="text" placeholder="Отдел" value={replacementForm.department} onChange={e => setReplacementForm({ ...replacementForm, department: e.target.value })} style={{ width: "100%", padding: 10, marginBottom: 10, border: `1px solid ${darkMode ? "#334155" : "#e2e8f0"}`, borderRadius: 8, background: darkMode ? "#0f172a" : "white", color: darkMode ? "#f1f5f9" : "#1e293b", fontSize: 14 }} />
             <input type="text" placeholder="Должность" value={replacementForm.position} onChange={e => setReplacementForm({ ...replacementForm, position: e.target.value })} style={{ width: "100%", padding: 10, marginBottom: 10, border: `1px solid ${darkMode ? "#334155" : "#e2e8f0"}`, borderRadius: 8, background: darkMode ? "#0f172a" : "white", color: darkMode ? "#f1f5f9" : "#1e293b", fontSize: 14 }} />
-            <input type="text" placeholder="Кто уходит *" value={replacementForm.employeeName} onChange={e => setReplacementForm({ ...replacementForm, employeeName: e.target.value })} style={{ width: "100%", padding: 10, marginBottom: 10, border: `1px solid ${darkMode ? "#334155" : "#e2e8f0"}`, borderRadius: 8, background: darkMode ? "#0f172a" : "white", color: darkMode ? "#f1f5f9" : "#1e293b", fontSize: 14 }} />
-            <input type="text" placeholder="Кто заменяет *" value={replacementForm.substituteName} onChange={e => setReplacementForm({ ...replacementForm, substituteName: e.target.value })} style={{ width: "100%", padding: 10, marginBottom: 10, border: `1px solid ${darkMode ? "#334155" : "#e2e8f0"}`, borderRadius: 8, background: darkMode ? "#0f172a" : "white", color: darkMode ? "#f1f5f9" : "#1e293b", fontSize: 14 }} />
-            <input type="date" value={replacementForm.startDate} onChange={e => setReplacementForm({ ...replacementForm, startDate: e.target.value })} style={{ width: "100%", padding: 10, marginBottom: 10, border: `1px solid ${darkMode ? "#334155" : "#e2e8f0"}`, borderRadius: 8, background: darkMode ? "#0f172a" : "white", color: darkMode ? "#f1f5f9" : "#1e293b", fontSize: 14 }} />
-            <input type="date" value={replacementForm.endDate} onChange={e => setReplacementForm({ ...replacementForm, endDate: e.target.value })} style={{ width: "100%", padding: 10, marginBottom: 10, border: `1px solid ${darkMode ? "#334155" : "#e2e8f0"}`, borderRadius: 8, background: darkMode ? "#0f172a" : "white", color: darkMode ? "#f1f5f9" : "#1e293b", fontSize: 14 }} />
+            
+            <UserSearchInput
+              value={replacementForm.employeeName}
+              onChange={(val) => setReplacementForm({ ...replacementForm, employeeName: val })}
+              placeholder="Кто уходит *"
+              getToken={getToken}
+            />
+            
+            <UserSearchInput
+              value={replacementForm.substituteName}
+              onChange={(val) => setReplacementForm({ ...replacementForm, substituteName: val })}
+              placeholder="Кто заменяет *"
+              getToken={getToken}
+            />
+            
+            <input
+              type="text"
+              placeholder="ДД.ММ.ГГГГ"
+              value={replacementForm.startDate}
+              onChange={e => handleReplacementDateChange(e.target.value, 'startDate')}
+              maxLength={10}
+              style={styles.input}
+            />
+            
+            <input
+              type="text"
+              placeholder="ДД.ММ.ГГГГ"
+              value={replacementForm.endDate}
+              onChange={e => handleReplacementDateChange(e.target.value, 'endDate')}
+              maxLength={10}
+              style={styles.input}
+            />
+            
             <input type="text" placeholder="Причина" value={replacementForm.reason} onChange={e => setReplacementForm({ ...replacementForm, reason: e.target.value })} style={{ width: "100%", padding: 10, marginBottom: 10, border: `1px solid ${darkMode ? "#334155" : "#e2e8f0"}`, borderRadius: 8, background: darkMode ? "#0f172a" : "white", color: darkMode ? "#f1f5f9" : "#1e293b", fontSize: 14 }} />
+            
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
               <button onClick={() => setIsReplacementModalOpen(false)} style={{ padding: "8px 20px", border: `1px solid ${darkMode ? "#334155" : "#e2e8f0"}`, background: "transparent", borderRadius: 10, cursor: "pointer", fontSize: 14 }}>Отмена</button>
               <button onClick={addReplacement} style={{ background: "#10b981", color: "white", border: "none", padding: "8px 20px", borderRadius: 10, cursor: "pointer", fontSize: 14 }}>+ Добавить</button>

@@ -17,7 +17,7 @@ const ITEquipment = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
   const fetchEquipmentTypes = async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://192.168.7.103:8000/api/admin/equipment-types", {
+      const res = await fetch("/api/admin/equipment-types", {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
       const data = await res.json();
@@ -38,8 +38,8 @@ const ITEquipment = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
     formBody.append("unit", formData.unit);
 
     const url = editingItem
-      ? `http://192.168.7.103:8000/api/admin/equipment-types/${editingItem.id}`
-      : "http://192.168.7.103:8000/api/admin/equipment-types";
+      ? `/api/admin/equipment-types/${editingItem.id}`
+      : "/api/admin/equipment-types";
     const method = editingItem ? "PUT" : "POST";
 
     try {
@@ -63,7 +63,7 @@ const ITEquipment = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
   const deleteItem = async (id) => {
     if (!confirm("Удалить тип комплектующего?")) return;
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/admin/equipment-types/${id}`, {
+      const res = await fetch(`/api/admin/equipment-types/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${getToken()}` }
       });

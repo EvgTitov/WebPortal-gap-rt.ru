@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { 
-  Plus, X, Trash2, Edit2, CheckCircle, RefreshCw, Save, 
-  Calendar, User, Wrench, Archive, Filter 
+import {
+  Plus, X, Trash2, Edit2, CheckCircle, RefreshCw, Save,
+  Calendar, User, Wrench, Archive, Filter, FileText, RotateCcw
 } from "lucide-react";
 import UserSearchInput from "../components/UserSearchInput";
 
@@ -13,6 +13,10 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportStartDate, setReportStartDate] = useState("");
+  const [reportEndDate, setReportEndDate] = useState("");
+  const [reportLoading, setReportLoading] = useState(false);
   const [taskForm, setTaskForm] = useState({
     title: "",
     description: "",
@@ -24,12 +28,60 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
     due_date: "",
   });
 
-  const categoriesWithComponents = ["🖥️ Сборка ПК", "🔧 Ремонт", "🖨️ Принтеры/МФУ"];
+  const categoriesWithComponents = ["🖥️ Сборка ПК", "🔧 Ремонт", "🖨️ Принтеры/МФУ", "🖥️ ПК/ноутбук"];
+
+  // Функция для валидации и ограничения ввода даты в формате ДД.ММ.ГГГГ
+  const handleDateChange = (value) => {
+    // Удаляем все нецифровые символы
+    let cleaned = value.replace(/\D/g, "");
+    
+    // Ограничиваем длину: 8 цифр (ДДММГГГГ)
+    if (cleaned.length > 8) {
+      cleaned = cleaned.slice(0, 8);
+    }
+    
+    // Форматируем с точками
+    let formatted = "";
+    if (cleaned.length >= 3) {
+      formatted = `${cleaned.slice(0, 2)}.${cleaned.slice(2, 4)}`;
+      if (cleaned.length >= 5) {
+        formatted += `.${cleaned.slice(4, 8)}`;
+      }
+    } else if (cleaned.length > 0) {
+      formatted = cleaned;
+    }
+    
+    // Проверка дня: первые 2 цифры от 01 до 31
+    if (formatted.length >= 2) {
+      const day = parseInt(formatted.slice(0, 2));
+      if (day < 1 || day > 31) {
+        return;
+      }
+    }
+    
+    // Проверка месяца: следующие 2 цифры от 01 до 12
+    if (formatted.length >= 5) {
+      const month = parseInt(formatted.slice(3, 5));
+      if (month < 1 || month > 12) {
+        return;
+      }
+    }
+    
+    // Проверка года: последние 4 цифры от 2000 до 2030
+    if (formatted.length === 10) {
+      const year = parseInt(formatted.slice(6, 10));
+      if (year < 2000 || year > 2030) {
+        return;
+      }
+    }
+    
+    setTaskForm({ ...taskForm, due_date: formatted });
+  };
 
   const fetchTasks = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/it-tasks?archived=${showArchived}`, {
+      const res = await fetch(`/api/it-tasks?archived=${showArchived}`, {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
       const data = await res.json();
@@ -40,7 +92,7 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch("http://192.168.7.103:8000/api/task-categories", {
+      const res = await fetch("/api/task-categories", {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
       const data = await res.json();
@@ -50,7 +102,7 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
 
   const fetchEquipmentTypes = async () => {
     try {
-      const res = await fetch("http://192.168.7.103:8000/api/admin/equipment-types", {
+      const res = await fetch("/api/admin/equipment-types", {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
       const data = await res.json();
@@ -75,8 +127,8 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
     if (taskForm.due_date) formData.append("due_date", taskForm.due_date);
 
     const url = editingTask
-      ? `http://192.168.7.103:8000/api/it-tasks/${editingTask.id}`
-      : "http://192.168.7.103:8000/api/it-tasks";
+      ? `/api/it-tasks/${editingTask.id}`
+      : "/api/it-tasks";
     const method = editingTask ? "PUT" : "POST";
 
     try {
@@ -101,9 +153,9 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
   const completeTask = async (task) => {
     const formData = new FormData();
     formData.append("is_archived", "1");
-    
+
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/it-tasks/${task.id}`, {
+      const res = await fetch(`/api/it-tasks/${task.id}`, {
         method: "PUT",
         headers: { Authorization: `Bearer ${getToken()}` },
         body: formData
@@ -117,10 +169,25 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
     }
   };
 
+  const restoreTask = async (taskId) => {
+    try {
+      const res = await fetch(`/api/it-tasks/${taskId}/restore`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}` }
+      });
+      if (res.ok) {
+        showMessage("↩️ Задача восстановлена из архива");
+        await fetchTasks();
+      }
+    } catch (err) {
+      showMessage("Ошибка восстановления", "error");
+    }
+  };
+
   const deleteTask = async (id) => {
     if (!confirm("Удалить задачу?")) return;
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/it-tasks/${id}`, {
+      const res = await fetch(`/api/it-tasks/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${getToken()}` }
       });
@@ -131,6 +198,45 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
     } catch (err) {
       showMessage("Ошибка удаления", "error");
     }
+  };
+
+  const generateReport = async () => {
+    if (!reportStartDate || !reportEndDate) {
+      showMessage("Выберите период для отчета", "error");
+      return;
+    }
+
+    setReportLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("start_date", reportStartDate);
+      formData.append("end_date", reportEndDate);
+
+      const res = await fetch("/api/it-tasks/report", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: formData
+      });
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `tasks_report_${reportStartDate}_${reportEndDate}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        showMessage("📊 Отчет сформирован и скачан");
+        setShowReportModal(false);
+        setReportStartDate("");
+        setReportEndDate("");
+      }
+    } catch (err) {
+      showMessage("Ошибка формирования отчета", "error");
+    }
+    setReportLoading(false);
   };
 
   const resetForm = () => {
@@ -270,6 +376,18 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
       alignItems: "center",
       gap: 6
     },
+    buttonInfo: {
+      background: "#8b5cf6",
+      color: "white",
+      border: "none",
+      padding: "6px 12px",
+      borderRadius: 8,
+      cursor: "pointer",
+      fontSize: 12,
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6
+    },
     statusBadge: {
       display: "inline-block",
       padding: "4px 12px",
@@ -328,12 +446,14 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
     taskMeta: { display: "flex", flexWrap: "wrap", gap: 16, fontSize: 12, color: "#64748b", marginTop: 8 }
   };
 
+  const isAdmin = userRole === 'admin' || isAdminByGroup;
+
   return (
     <div style={styles.container}>
       <div style={styles.card}>
         <div style={styles.cardHeader}>
           <h2 style={{ margin: 0, fontSize: 20 }}>🛠️ Задачи IT-отдела</h2>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button onClick={fetchTasks} style={styles.buttonSecondary}>
               <RefreshCw size={14} /> Обновить
             </button>
@@ -341,9 +461,18 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
               {showArchived ? <Archive size={14} /> : <Filter size={14} />}
               {showArchived ? " Активные" : " Архив"}
             </button>
-            <button onClick={() => { resetForm(); setShowTaskForm(true); }} style={styles.buttonPrimary}>
-              <Plus size={14} /> Новая задача
-            </button>
+            
+            {isAdmin && (
+              <button onClick={() => setShowReportModal(true)} style={styles.buttonInfo}>
+                <FileText size={14} /> Отчёт
+              </button>
+            )}
+            
+            {isAdmin && (
+              <button onClick={() => { resetForm(); setShowTaskForm(true); }} style={styles.buttonPrimary}>
+                <Plus size={14} /> Новая задача
+              </button>
+            )}
           </div>
         </div>
 
@@ -398,17 +527,28 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  {!task.is_archived && (
+                  {showArchived ? (
+                    isAdmin && (
+                      <button onClick={() => restoreTask(task.id)} style={styles.buttonInfo} title="Вернуть в активные">
+                        <RotateCcw size={14} /> Вернуть
+                      </button>
+                    )
+                  ) : (
                     <button onClick={() => completeTask(task)} style={styles.buttonSuccess} title="Выполнено">
                       <CheckCircle size={14} /> Выполнено
                     </button>
                   )}
-                  <button onClick={() => editTask(task)} style={styles.buttonPrimary}>
-                    <Edit2 size={14} />
-                  </button>
-                  <button onClick={() => deleteTask(task.id)} style={styles.buttonDanger}>
-                    <Trash2 size={14} />
-                  </button>
+                  
+                  {isAdmin && (
+                    <>
+                      <button onClick={() => editTask(task)} style={styles.buttonPrimary}>
+                        <Edit2 size={14} />
+                      </button>
+                      <button onClick={() => deleteTask(task.id)} style={styles.buttonDanger}>
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -416,9 +556,9 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
         )}
       </div>
 
-      {showTaskForm && (
-        <div 
-          style={styles.modal} 
+      {showTaskForm && isAdmin && (
+        <div
+          style={styles.modal}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget && window.getSelection().toString() === "") {
               setShowTaskForm(false);
@@ -430,7 +570,7 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
               <h3>{editingTask ? "✏️ Редактировать задачу" : "➕ Новая задача"}</h3>
               <button onClick={() => setShowTaskForm(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer" }}>✕</button>
             </div>
-            
+
             <input
               type="text"
               placeholder="Название задачи *"
@@ -438,7 +578,7 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
               onChange={e => setTaskForm({ ...taskForm, title: e.target.value })}
               style={styles.input}
             />
-            
+
             <textarea
               placeholder="Описание"
               value={taskForm.description}
@@ -446,7 +586,7 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
               rows={3}
               style={styles.textarea}
             />
-            
+
             <select
               value={taskForm.category_id}
               onChange={e => setTaskForm({ ...taskForm, category_id: e.target.value })}
@@ -457,29 +597,30 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
-            
+
             <UserSearchInput
               value={taskForm.assigned_to}
               onChange={(val) => setTaskForm({ ...taskForm, assigned_to: val })}
               placeholder="Кому выдать (ФИО)"
               getToken={getToken}
             />
-            
+
             <UserSearchInput
               value={taskForm.executor}
               onChange={(val) => setTaskForm({ ...taskForm, executor: val })}
               placeholder="Исполнитель (ФИО)"
               getToken={getToken}
             />
-            
+
             <input
-              type="date"
-              placeholder="Срок выполнения"
+              type="text"
+              placeholder="ДД.ММ.ГГГГ"
               value={taskForm.due_date}
-              onChange={e => setTaskForm({ ...taskForm, due_date: e.target.value })}
+              onChange={e => handleDateChange(e.target.value)}
+              maxLength={10}
               style={styles.input}
             />
-            
+
             {shouldShowComponentsStatus() && (
               <>
                 <select
@@ -492,7 +633,7 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
                     <option key={eq.id} value={eq.id}>{eq.name} ({eq.unit})</option>
                   ))}
                 </select>
-                
+
                 <div style={styles.radioGroup}>
                   <span style={{ fontSize: 13, fontWeight: 500 }}>Статус:</span>
                   <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -522,13 +663,49 @@ const ITTasks = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
                 </div>
               </>
             )}
-            
+
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
               <button onClick={() => setShowTaskForm(false)} style={{ padding: "8px 20px", border: "1px solid #e2e8f0", borderRadius: 8, background: "white", cursor: "pointer" }}>
                 Отмена
               </button>
               <button onClick={saveTask} style={{ background: "#3b82f6", color: "white", border: "none", padding: "8px 20px", borderRadius: 8, cursor: "pointer" }}>
                 <Save size={14} /> Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReportModal && isAdmin && (
+        <div style={styles.modal} onClick={() => setShowReportModal(false)}>
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+              <h3>📊 Сформировать отчёт</h3>
+              <button onClick={() => setShowReportModal(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer" }}>✕</button>
+            </div>
+
+            <label style={{ display: "block", marginBottom: 8, fontSize: 13, fontWeight: 500 }}>Дата начала</label>
+            <input
+              type="date"
+              value={reportStartDate}
+              onChange={e => setReportStartDate(e.target.value)}
+              style={styles.input}
+            />
+
+            <label style={{ display: "block", marginBottom: 8, fontSize: 13, fontWeight: 500 }}>Дата окончания</label>
+            <input
+              type="date"
+              value={reportEndDate}
+              onChange={e => setReportEndDate(e.target.value)}
+              style={styles.input}
+            />
+
+            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
+              <button onClick={() => setShowReportModal(false)} style={{ padding: "8px 20px", border: "1px solid #e2e8f0", borderRadius: 8, background: "white", cursor: "pointer" }}>
+                Отмена
+              </button>
+              <button onClick={generateReport} disabled={reportLoading} style={{ background: "#8b5cf6", color: "white", border: "none", padding: "8px 20px", borderRadius: 8, cursor: "pointer" }}>
+                {reportLoading ? "Загрузка..." : "Сформировать"}
               </button>
             </div>
           </div>

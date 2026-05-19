@@ -6,6 +6,12 @@ const UserSearchInput = ({ value, onChange, placeholder, getToken }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const wrapperRef = useRef(null);
+  const timerRef = useRef(null);
+  const isSelectingRef = useRef(false);
+
+  useEffect(() => {
+    setSearchTerm(value || "");
+  }, [value]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -17,28 +23,18 @@ const UserSearchInput = ({ value, onChange, placeholder, getToken }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    const delayDebounce = setTimeout(() => {
-      if (searchTerm.length >= 2) {
-        searchUsers(searchTerm);
-      } else {
-        setResults([]);
-        setIsOpen(false);
-      }
-    }, 300);
-    return () => clearTimeout(delayDebounce);
-  }, [searchTerm]);
-
   const searchUsers = async (query) => {
+    if (!query || query.length < 2 || isSelectingRef.current) return;
+    
     setLoading(true);
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/admin/ad-users?query=${encodeURIComponent(query)}&limit=10`, {
+      const res = await fetch(`/api/users/authorized?query=${encodeURIComponent(query)}&limit=10`, {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
       const data = await res.json();
       if (res.ok) {
         setResults(data.users || []);
-        setIsOpen(true);
+        setIsOpen(data.users && data.users.length > 0);
       }
     } catch (err) {
       console.error(err);
@@ -46,11 +42,56 @@ const UserSearchInput = ({ value, onChange, placeholder, getToken }) => {
     setLoading(false);
   };
 
+  const handleInputChange = (e) => {
+    const newValue = e.target.value;
+    setSearchTerm(newValue);
+    onChange(newValue);
+    
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    
+    if (newValue === "") {
+      setResults([]);
+      setIsOpen(false);
+      return;
+    }
+    
+    if (newValue.length >= 2) {
+      timerRef.current = setTimeout(() => {
+        if (!isSelectingRef.current) {
+          searchUsers(newValue);
+        }
+      }, 300);
+    } else {
+      setResults([]);
+      setIsOpen(false);
+    }
+  };
+
   const selectUser = (user) => {
-    setSearchTerm(user.display_name || user.username);
-    onChange(user.display_name || user.username);
+    const displayName = user.display_name || user.username;
+    
+    isSelectingRef.current = true;
+    
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    
+    setSearchTerm(displayName);
+    onChange(displayName);
     setIsOpen(false);
     setResults([]);
+    
+    setTimeout(() => {
+      isSelectingRef.current = false;
+    }, 200);
+  };
+
+  const handleFocus = () => {
+    if (searchTerm.length >= 2 && results.length > 0 && !isSelectingRef.current) {
+      setIsOpen(true);
+    }
   };
 
   const styles = {
@@ -93,9 +134,10 @@ const UserSearchInput = ({ value, onChange, placeholder, getToken }) => {
         type="text"
         placeholder={placeholder}
         value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
+        onChange={handleInputChange}
+        onFocus={handleFocus}
         style={styles.input}
-        onFocus={() => searchTerm.length >= 2 && searchUsers(searchTerm)}
+        autoComplete="off"
       />
       {isOpen && results.length > 0 && (
         <div style={styles.dropdown}>

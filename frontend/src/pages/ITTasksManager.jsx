@@ -21,7 +21,7 @@ const ITTasksManager = ({ getToken, showMessage }) => {
   const fetchTasks = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/admin/it-tasks?archived=${showArchived}`, {
+      const res = await fetch(`/api/admin/it-tasks?archived=${showArchived}`, {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
       const data = await res.json();
@@ -32,7 +32,7 @@ const ITTasksManager = ({ getToken, showMessage }) => {
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch("http://192.168.7.103:8000/api/admin/task-categories", {
+      const res = await fetch("/api/admin/task-categories", {
         headers: { Authorization: `Bearer ${getToken()}` }
       });
       const data = await res.json();
@@ -56,8 +56,8 @@ const ITTasksManager = ({ getToken, showMessage }) => {
     if (taskForm.due_date) formData.append("due_date", taskForm.due_date);
 
     const url = editingTask
-      ? `http://192.168.7.103:8000/api/admin/it-tasks/${editingTask.id}`
-      : "http://192.168.7.103:8000/api/admin/it-tasks";
+      ? `/api/admin/it-tasks/${editingTask.id}`
+      : "/api/admin/it-tasks";
     const method = editingTask ? "PUT" : "POST";
 
     try {
@@ -81,9 +81,9 @@ const ITTasksManager = ({ getToken, showMessage }) => {
   const completeTask = async (task) => {
     const formData = new FormData();
     formData.append("is_archived", "1");
-    
+
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/admin/it-tasks/${task.id}`, {
+      const res = await fetch(`/api/admin/it-tasks/${task.id}`, {
         method: "PUT",
         headers: { Authorization: `Bearer ${getToken()}` },
         body: formData
@@ -100,7 +100,7 @@ const ITTasksManager = ({ getToken, showMessage }) => {
   const deleteTask = async (id) => {
     if (!confirm("Удалить задачу?")) return;
     try {
-      const res = await fetch(`http://192.168.7.103:8000/api/admin/it-tasks/${id}`, {
+      const res = await fetch(`/api/admin/it-tasks/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${getToken()}` }
       });
@@ -360,7 +360,7 @@ const ITTasksManager = ({ getToken, showMessage }) => {
               <h3>{editingTask ? "✏️ Редактировать задачу" : "➕ Новая задача"}</h3>
               <button onClick={() => setShowTaskForm(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer" }}>✕</button>
             </div>
-            
+
             <input
               type="text"
               placeholder="Название задачи *"
@@ -368,7 +368,7 @@ const ITTasksManager = ({ getToken, showMessage }) => {
               onChange={e => setTaskForm({ ...taskForm, title: e.target.value })}
               style={styles.input}
             />
-            
+
             <textarea
               placeholder="Описание"
               value={taskForm.description}
@@ -376,7 +376,7 @@ const ITTasksManager = ({ getToken, showMessage }) => {
               rows={3}
               style={styles.textarea}
             />
-            
+
             <select
               value={taskForm.category_id}
               onChange={e => setTaskForm({ ...taskForm, category_id: e.target.value })}
@@ -387,7 +387,7 @@ const ITTasksManager = ({ getToken, showMessage }) => {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
-            
+
             <input
               type="text"
               placeholder="Кому выдать (ФИО)"
@@ -395,7 +395,7 @@ const ITTasksManager = ({ getToken, showMessage }) => {
               onChange={e => setTaskForm({ ...taskForm, assigned_to: e.target.value })}
               style={styles.input}
             />
-            
+
             <input
               type="text"
               placeholder="Исполнитель (ФИО)"
@@ -403,7 +403,7 @@ const ITTasksManager = ({ getToken, showMessage }) => {
               onChange={e => setTaskForm({ ...taskForm, executor: e.target.value })}
               style={styles.input}
             />
-            
+
             <input
               type="date"
               placeholder="Срок выполнения"
@@ -411,7 +411,7 @@ const ITTasksManager = ({ getToken, showMessage }) => {
               onChange={e => setTaskForm({ ...taskForm, due_date: e.target.value })}
               style={styles.input}
             />
-            
+
             <div style={styles.radioGroup}>
               <span style={{ fontSize: 13, fontWeight: 500 }}>Статус комплектующих:</span>
               <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -439,7 +439,7 @@ const ITTasksManager = ({ getToken, showMessage }) => {
                 /> 🔴 Нет
               </label>
             </div>
-            
+
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
               <button onClick={() => setShowTaskForm(false)} style={{ padding: "8px 20px", border: "1px solid #e2e8f0", borderRadius: 8, background: "white", cursor: "pointer" }}>
                 Отмена

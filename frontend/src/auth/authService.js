@@ -1,4 +1,4 @@
-const API_URL = 'http://192.168.7.103:8000/api';
+const API_URL = '/api';
 
 export const login = async (username, password) => {
   const response = await fetch(`${API_URL}/auth/login`, {

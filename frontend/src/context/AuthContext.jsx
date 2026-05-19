@@ -1,5 +1,25 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { login as apiLogin, logout as apiLogout, checkAuth } from './authService';
+
+const API_URL = '/api';
+
+const loginApi = async (username, password) => {
+  const response = await fetch(`${API_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!response.ok) throw new Error('Login failed');
+  return response.json();
+};
+
+const checkAuth = async (token) => {
+  try {
+    const response = await fetch(`${API_URL}/auth/me`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return response.ok;
+  } catch { return false; }
+};
 
 const AuthContext = createContext();
 
@@ -12,20 +32,6 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [userRole, setUserRole] = useState('user');
 
-  // Функция получения роли с бэкенда
-  const fetchUserRole = async (authToken) => {
-    try {
-      const res = await fetch('/api/admin/user-role', {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
-      const data = await res.json();
-      return data.role;
-    } catch (err) {
-      console.error('Error fetching user role:', err);
-      return 'user';
-    }
-  };
-
   useEffect(() => {
     const initAuth = async () => {
       const storedToken = localStorage.getItem('token');
@@ -37,14 +43,8 @@ export const AuthProvider = ({ children }) => {
           if (isValid) {
             setToken(storedToken);
             const userData = JSON.parse(storedUser);
-            
-            // Получаем актуальную роль с бэкенда
-            const role = await fetchUserRole(storedToken);
-            userData.role = role;
-            localStorage.setItem('user', JSON.stringify(userData));
-            
             setUser(userData);
-            setUserRole(role);
+            setUserRole(userData.role || 'user');
             setIsAuthenticated(true);
           } else {
             localStorage.removeItem('token');
@@ -58,25 +58,20 @@ export const AuthProvider = ({ children }) => {
       }
       setIsLoading(false);
     };
-    
     initAuth();
   }, []);
 
   const login = async (username, password) => {
     try {
-      const data = await apiLogin(username, password);
+      const data = await loginApi(username, password);
       const { token, user } = data;
       
-      // Получаем роль с бэкенда
-      const role = await fetchUserRole(token);
-      const userWithRole = { ...user, role: role };
-      
       localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(userWithRole));
+      localStorage.setItem('user', JSON.stringify(user));
       
       setToken(token);
-      setUser(userWithRole);
-      setUserRole(role);
+      setUser(user);
+      setUserRole(user.role || 'user');
       setIsAuthenticated(true);
       
       return { success: true };
@@ -85,13 +80,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = async () => {
-    try {
-      await apiLogout();
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-    
+  const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setToken(null);
@@ -114,9 +103,5 @@ export const AuthProvider = ({ children }) => {
     isModerator: userRole === 'moderator'
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
