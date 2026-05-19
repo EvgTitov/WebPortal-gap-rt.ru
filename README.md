@@ -79,34 +79,34 @@ corporate-portal/
 ## 📸 Скриншоты портала
 
 ### 🔐 Страница логина
-https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/%D0%9B%D0%BE%D0%B3%D0%B8%D0%BD.png
+![Логин](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/Логин.png)
 
 ### 🏠 Главная страница
-https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/%D0%93%D0%BB%D0%B0%D0%B2%D0%BD%D0%B0%D1%8F.png
+![Главная](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/Главная.png)
 
 ### 🛡️ Администрирование
-https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/%D0%90%D0%B4%D0%BC%D0%B8%D0%BD%D0%B8%D1%81%D1%82%D1%80%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5.png
-
-### 🛠️ IT задачи
-https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/IT%2520%D0%B7%D0%B0%D0%B4%D0%B0%D1%87%D0%B8.png
-
-### 🔧 Комплектующие
-https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/IT%2520%25D0%25B7%25D0%25B0%25D0%25B4%25D0%25B0%25D1%2587%25D0%25B8-%25D0%259A%25D0%25BE%25D0%25BC%25D0%25BF%25D0%25BB%25D0%25B5%25D0%25BA%25D1%2582%25D1%2583%25D1%258E%25D1%2589%25D0%25B8%25D0%25B5.png
+![Администрирование](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/Администрирование.png)
 
 ### 🔍 Поиск пользователей в админке
-https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/%D0%9F%D0%BE%D0%B8%D1%81%D0%BA%2520%D0%BF%D0%BE%D0%BB%D1%8C%D0%B7%D0%BE%D0%B2%D0%B0%D1%82%D0%B5%D0%BB%D0%B5%D0%B9%2520%D0%B2%2520%D0%90%D0%B4%D0%BC%D0%B8%D0%BD%D0%BA%D0%B5.png
+![Поиск пользователей в Админке](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/Поиск%20пользователей%20в%20Админке.png)
+
+### 🛠️ IT задачи
+![IT задачи](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/IT%20задачи.png)
+
+### 🔧 Комплектующие
+![Комплектующие](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/IT%20%D0%B7%D0%B0%D0%B4%D0%B0%D1%87%D0%B8-%D0%9A%D0%BE%D0%BC%D0%BF%D0%BB%D0%B5%D0%BA%D1%82%D1%83%D1%8E%D1%89%D0%B8%D0%B5.png)
 
 ### 📅 Календарь событий
-https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/%D0%9A%D0%B0%D0%BB%D0%B5%D0%BD%D0%B4%D0%B0%D1%80%D1%8C.png
+![Календарь](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/Календарь.png)
 
 ### 📋 События
-https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/%D0%A1%D0%BE%D0%B1%D1%8B%D1%82%D0%B8%D1%8F.png
+![События](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/События.png)
 
 ### 🔄 Замены на отпуск
-https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/%D0%97%D0%B5%D0%BC%D0%BD%D1%8B%2520%D1%81%D0%BE%D1%82%D1%80%D1%83%D0%B4%D0%BD%D0%B8%D0%BA%D0%BE%D0%B2.png
+![Замены](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/Змены%20сотрудников.png)
 
 ### 💬 Чат
-https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/%D0%A7%D0%B0%D1%82.png
+![Чат](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/Чат.png)
 
 
 
