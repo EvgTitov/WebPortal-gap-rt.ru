@@ -45,3 +45,4 @@ ENV/
 .DS_Store
 Thumbs.db
 desktop.ini
+backend/ad_auth.py
