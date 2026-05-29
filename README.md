@@ -126,34 +126,33 @@
 
 ---
 
-## 📁 Структура проекта
+## Структура проекта
 webportal/
 ├── backend/
-│ ├── main.py # Точка входа, API эндпоинты
-│ ├── ad_auth.py # Аутентификация через AD
+│ ├── main.py
+│ ├── ad_auth.py
 │ ├── server/
-│ │ └── ad_users.py # Работа с пользователями AD
-│ ├── uploads/ # Загруженные изображения (не в Git)
-│ ├── settings.db # БД настроек (не в Git)
-│ ├── news.db # БД новостей (не в Git)
-│ └── chat.db # БД чата (не в Git)
+│ │ └── ad_users.py
+│ ├── uploads/ (не в Git)
+│ ├── settings.db (не в Git)
+│ ├── news.db (не в Git)
+│ └── chat.db (не в Git)
 ├── frontend/
 │ ├── src/
 │ │ ├── pages/
-│ │ │ ├── MainPage.jsx # Главная страница
-│ │ │ ├── AdminPanel.jsx # Админ-панель
-│ │ │ ├── ITTasks.jsx # IT-задачи
-│ │ │ ├── ITMonitoring.jsx # Мониторинг задач
-│ │ │ ├── PeriodicTasks.jsx # Периодические задачи
-│ │ │ └── ITEquipment.jsx # Комплектующие
+│ │ │ ├── MainPage.jsx
+│ │ │ ├── AdminPanel.jsx
+│ │ │ ├── ITTasks.jsx
+│ │ │ ├── ITMonitoring.jsx
+│ │ │ ├── PeriodicTasks.jsx
+│ │ │ └── ITEquipment.jsx
 │ │ ├── auth/
-│ │ │ └── AuthContext.jsx # Контекст аутентификации
-│ │ └── components/
-│ │ └── UserSearchInput.jsx # Поиск пользователей
-│ └── dist/ # Сборка фронтенда (не в Git)
-└── images/ # Скриншоты для README
-
----
+│ │ │ └── AuthContext.jsx
+│ │ ├── components/
+│ │ │ └── UserSearchInput.jsx
+│ │ └── dist/ (не в Git)
+│ └── images/ (скриншоты для README)
+└── README.md
 
 ## 🚫 Файлы, исключённые из репозитория
 
