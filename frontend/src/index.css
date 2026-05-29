@@ -1,0 +1,479 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Стили для DatePicker - светлая тема */
+.custom-datepicker {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  background: white;
+  box-sizing: border-box;
+}
+
+.custom-datepicker:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.1);
+}
+
+.react-datepicker-wrapper {
+  width: 100%;
+  display: block;
+}
+
+.react-datepicker__input-container {
+  width: 100%;
+  display: block;
+}
+
+.react-datepicker {
+  font-family: inherit;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+}
+
+.react-datepicker__header {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 12px 12px 0 0;
+}
+
+.react-datepicker__current-month {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.react-datepicker__day-name {
+  color: #64748b;
+}
+
+.react-datepicker__day:hover {
+  background: #3b82f6;
+  color: white;
+}
+
+.react-datepicker__day--selected {
+  background: #3b82f6;
+  color: white;
+}
+
+.react-datepicker__day--selected:hover {
+  background: #2563eb;
+}
+
+.react-datepicker__day--keyboard-selected {
+  background: #3b82f6;
+  color: white;
+}
+
+/* ============ ТЁМНАЯ ТЕМА (DARK MODE) ============ */
+
+body.dark {
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+
+/* Фоны */
+body.dark .bg-white,
+body.dark .bg-gray-50,
+body.dark .bg-gray-100 {
+  background-color: #1e293b !important;
+}
+
+/* Текст */
+body.dark .text-gray-400,
+body.dark .text-gray-500,
+body.dark .text-gray-600,
+body.dark .text-gray-700,
+body.dark .text-gray-800,
+body.dark .text-gray-900,
+body.dark .text-slate-400,
+body.dark .text-slate-500,
+body.dark .text-slate-600,
+body.dark .text-slate-700,
+body.dark .text-slate-800,
+body.dark .text-slate-900 {
+  color: #cbd5e1 !important;
+}
+
+/* Заголовки */
+body.dark h1, body.dark h2, body.dark h3, body.dark h4, body.dark h5, body.dark h6,
+body.dark .font-bold,
+body.dark .font-semibold,
+body.dark .font-medium,
+body.dark strong {
+  color: #f1f5f9 !important;
+}
+
+/* Метки и подписи */
+body.dark label,
+body.dark .text-sm,
+body.dark .text-xs {
+  color: #cbd5e1 !important;
+}
+
+/* Границы */
+body.dark .border,
+body.dark .border-t,
+body.dark .border-b,
+body.dark .border-l,
+body.dark .border-r,
+body.dark .border-gray-100,
+body.dark .border-gray-200,
+body.dark .border-gray-300,
+body.dark .border-slate-100,
+body.dark .border-slate-200,
+body.dark .border-slate-300 {
+  border-color: #334155 !important;
+}
+
+/* Инпуты и селекты */
+body.dark input,
+body.dark select,
+body.dark textarea,
+body.dark .custom-datepicker {
+  background-color: #0f172a !important;
+  border-color: #475569 !important;
+  color: #f1f5f9 !important;
+}
+
+body.dark input::placeholder,
+body.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Кнопки */
+body.dark button:not([class*="bg-gradient"]):not([class*="linear-gradient"]):not(.weather-card *) {
+  background-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+body.dark button:not([class*="bg-gradient"]):not([class*="linear-gradient"]):hover {
+  background-color: #475569 !important;
+}
+
+/* Ссылки */
+body.dark a {
+  color: #94a3b8 !important;
+}
+
+body.dark a:hover {
+  color: #3b82f6 !important;
+}
+
+/* Карточки */
+body.dark .card,
+body.dark .rounded-lg,
+body.dark .rounded-xl {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+/* Модальные окна */
+body.dark [class*="modal"],
+body.dark [class*="Modal"] {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+}
+
+/* Таблицы */
+body.dark table,
+body.dark tbody,
+body.dark td,
+body.dark th {
+  background-color: #1e293b !important;
+  color: #cbd5e1 !important;
+  border-color: #334155 !important;
+}
+
+/* Список участников */
+body.dark .participant-badge {
+  background-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+/* DatePicker в тёмной теме */
+body.dark .react-datepicker {
+  background-color: #1e293b !important;
+  border-color: #475569 !important;
+}
+
+body.dark .react-datepicker__header {
+  background-color: #0f172a !important;
+  border-color: #475569 !important;
+}
+
+body.dark .react-datepicker__current-month,
+body.dark .react-datepicker__day-name {
+  color: #f1f5f9 !important;
+}
+
+body.dark .react-datepicker__day {
+  color: #cbd5e1 !important;
+}
+
+body.dark .react-datepicker__day:hover {
+  background-color: #3b82f6 !important;
+  color: white !important;
+}
+
+/* Календарь в тёмной теме */
+body.dark .calendar-day {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+body.dark .calendar-day-today {
+  background-color: rgba(59,130,246,0.2) !important;
+  border-color: #3b82f6 !important;
+}
+
+/* Тост-уведомления в тёмной теме */
+body.dark .toast {
+  background-color: #1e293b !important;
+  border-color: #475569 !important;
+}
+
+/* Сайдбар в тёмной теме */
+body.dark .sidebar {
+  background-color: #0f172a !important;
+  border-right-color: #334155 !important;
+}
+
+/* ============ ВИДЖЕТ ПОГОДЫ И БАННЕР - ОСТАВЛЯЕМ КРАСИВЫМИ ============ */
+
+/* Виджет погоды */
+body.dark .weather-card {
+  background: linear-gradient(135deg, #3b82f6, #60a5fa) !important;
+  color: white !important;
+}
+
+body.dark .weather-card * {
+  color: white !important;
+  background-color: transparent !important;
+}
+
+/* Баннер приветствия */
+body.dark .banner {
+  background: linear-gradient(135deg, #3b82f6, #4f46e5, #7c3aed) !important;
+  color: white !important;
+}
+
+body.dark .banner * {
+  color: white !important;
+  background-color: transparent !important;
+}
+
+/* ============ IT ЗАДАЧИ - ТЁМНАЯ ТЕМА ============ */
+
+body.dark .it-tasks-container,
+body.dark .it-tasks-card,
+body.dark [class*="it-task"] {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+}
+
+/* Таблицы IT задач */
+body.dark .it-tasks-table,
+body.dark .it-tasks-table tbody,
+body.dark .it-tasks-table tr,
+body.dark .it-tasks-table td,
+body.dark .it-tasks-table th {
+  background-color: #1e293b !important;
+  color: #cbd5e1 !important;
+  border-color: #334155 !important;
+}
+
+/* Строки таблицы при наведении */
+body.dark .it-tasks-table tr:hover {
+  background-color: #334155 !important;
+}
+
+/* Карточки IT задач */
+body.dark .task-card,
+body.dark .it-task-item {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Статусы компонентов */
+body.dark .status-available {
+  color: #4ade80 !important;
+}
+
+body.dark .status-partial {
+  color: #fbbf24 !important;
+}
+
+body.dark .status-missing {
+  color: #f87171 !important;
+}
+
+/* Фильтры IT задач */
+body.dark .filters-panel,
+body.dark .filter-group {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+/* ============ АДМИНКА - ТЁМНАЯ ТЕМА ============ */
+
+body.dark .admin-container,
+body.dark .admin-panel {
+  background-color: #0f172a !important;
+  color: #f1f5f9 !important;
+}
+
+body.dark .admin-card,
+body.dark .admin-section {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+/* Таблицы в админке */
+body.dark .admin-table,
+body.dark .admin-table tbody,
+body.dark .admin-table tr,
+body.dark .admin-table td,
+body.dark .admin-table th {
+  background-color: #1e293b !important;
+  color: #cbd5e1 !important;
+  border-color: #334155 !important;
+}
+
+body.dark .admin-table tr:hover {
+  background-color: #334155 !important;
+}
+
+/* Формы в админке */
+body.dark .admin-form input,
+body.dark .admin-form select,
+body.dark .admin-form textarea {
+  background-color: #0f172a !important;
+  border-color: #475569 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Роли и права */
+body.dark .roles-list,
+body.dark .permissions-list {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+body.dark .role-item,
+body.dark .permission-item {
+  background-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Категории ресурсов в админке */
+body.dark .category-item,
+body.dark .resource-item {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+body.dark .category-item:hover,
+body.dark .resource-item:hover {
+  background-color: #334155 !important;
+}
+
+/* Сетевые ресурсы в админке */
+body.dark .network-resource {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+/* Группы AD в админке */
+body.dark .ad-group-item {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+/* Организационная структура в админке */
+body.dark .org-tree-node {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+body.dark .org-tree-node:hover {
+  background-color: #334155 !important;
+}
+
+/* Tabs в админке */
+body.dark .admin-tab {
+  background-color: #1e293b !important;
+  color: #94a3b8 !important;
+  border-color: #334155 !important;
+}
+
+body.dark .admin-tab.active {
+  background-color: #3b82f6 !important;
+  color: white !important;
+}
+
+/* Модальные окна в админке */
+body.dark .admin-modal,
+body.dark .admin-modal-content {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+  border-color: #475569 !important;
+}
+
+/* Кнопки в админке */
+body.dark .admin-button {
+  background-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+body.dark .admin-button-primary {
+  background-color: #3b82f6 !important;
+  color: white !important;
+}
+
+body.dark .admin-button-danger {
+  background-color: #ef4444 !important;
+  color: white !important;
+}
+
+body.dark .admin-button-success {
+  background-color: #10b981 !important;
+  color: white !important;
+}
+
+/* Пагинация в админке */
+body.dark .pagination-item {
+  background-color: #334155 !important;
+  color: #cbd5e1 !important;
+  border-color: #475569 !important;
+}
+
+body.dark .pagination-item.active {
+  background-color: #3b82f6 !important;
+  color: white !important;
+}

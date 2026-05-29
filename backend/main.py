@@ -11,6 +11,7 @@ import jwt
 import datetime
 import sqlite3
 from datetime import datetime as dt
+from datetime import timedelta
 import os
 import shutil
 import json
@@ -21,6 +22,8 @@ from email.mime.multipart import MIMEMultipart
 import csv
 from io import StringIO, BytesIO
 from dotenv import load_dotenv
+import calendar
+import asyncio
 
 # ============ ЗАГРУЗКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ ============
 load_dotenv()
@@ -28,8 +31,8 @@ load_dotenv()
 # ============ НАСТРОЙКИ ПОЧТЫ (из .env) ============
 SMTP_SERVER = os.getenv("SMTP_SERVER", "192.168.168.206")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 25))
-SMTP_USER = os.getenv("SMTP_USER", "web-mail")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_USER = os.getenv("SMTP_USER", "web-mail@gap-rt.ru")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "V9tSKNSdBS5dCfOskdwI")
 
 logger = logging.getLogger("main")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -56,8 +59,95 @@ NEWS_DB_PATH = os.path.join(BASE_DIR, "news.db")
 CHAT_DB_PATH = os.path.join(BASE_DIR, "chat.db")
 SETTINGS_DB_PATH = os.path.join(BASE_DIR, "settings.db")
 
+# ============ ФУНКЦИИ ДЛЯ ОТПРАВКИ ПИСЕМ ============
+
+def get_event_type_name(event_type):
+    types = {
+        'meeting': 'Совещание',
+        'vks': 'ВКС',
+        'deadline': 'Задача',
+        'replacement': 'Замена'
+    }
+    return types.get(event_type, event_type)
+
+def send_calendar_event_email(to_email, to_name, event, is_new=True):
+    if not to_email:
+        logger.warning(f"Email не указан для {to_name}")
+        return False
+    
+    try:
+        event_date = event.get('event_date')
+        if event_date and '-' in event_date:
+            event_date_display = f"{event_date[8:10]}.{event_date[5:7]}.{event_date[0:4]}"
+        else:
+            event_date_display = event_date
+        
+        event_time = event.get('event_time', '10:00') if not event.get('is_all_day') else 'весь день'
+        
+        if is_new:
+            subject = f"📅 Новое событие в календаре: {event.get('title')}"
+        else:
+            subject = f"✏️ Изменение события в календаре: {event.get('title')}"
+        
+        event_type_name = get_event_type_name(event.get('event_type', 'meeting'))
+        
+        body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+            <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <div style="background: linear-gradient(135deg, #3b82f6, #4f46e5); padding: 20px; color: white; text-align: center;">
+                    <h2 style="margin: 0; font-size: 24px;">📅 {event.get('title')}</h2>
+                </div>
+                <div style="padding: 20px;">
+                    <p>Уважаемый(ая) <strong>{to_name}</strong>!</p>
+                    <p>Вас добавили в событие календаря.</p>
+                    <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+                        <tr>
+                            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;"><strong>📅 Дата:</strong></td>
+                            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">{event_date_display} {f'в {event_time}' if event_time != 'весь день' else '(весь день)'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;"><strong>🏷️ Тип:</strong></td>
+                            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">{event_type_name}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;"><strong>📍 Место:</strong></td>
+                            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">{event.get('location') or 'Не указано'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;"><strong>📝 Описание:</strong></td>
+                            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">{event.get('description') or 'Нет'}</td>
+                        </tr>
+                    </table>
+                    <hr>
+                    <p style="text-align: center;">
+                        <a href="https://srv-app16.gap-rt.ru" style="display: inline-block; background: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px;">Перейти в календарь</a>
+                    </p>
+                    <p style="color: #666; font-size: 12px; text-align: center;">Это автоматическое уведомление. Пожалуйста, не отвечайте на него.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        msg = MIMEMultipart()
+        msg['From'] = SMTP_USER
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'html'))
+        
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        if SMTP_USER and SMTP_PASSWORD:
+            server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        logger.info(f"✅ Email о событии отправлен {to_name} на {to_email}")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Ошибка отправки email о событии: {e}")
+        return False
+
 def send_task_email(to_email, to_name, task_title, task_description, due_date, task_id):
-    """Отправка уведомления исполнителю о новой задаче"""
     if not to_email:
         logger.warning(f"Email не указан для исполнителя {to_name}")
         return False
@@ -89,14 +179,241 @@ def send_task_email(to_email, to_name, task_title, task_description, due_date, t
         msg.attach(MIMEText(body, 'html'))
         
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.login(SMTP_USER, SMTP_PASSWORD)
+        if SMTP_USER and SMTP_PASSWORD:
+            server.login(SMTP_USER, SMTP_PASSWORD)
         server.send_message(msg)
         server.quit()
-        logger.info(f"Email отправлен исполнителю {to_name} на {to_email}")
+        logger.info(f"✅ Email отправлен исполнителю {to_name} на {to_email}")
         return True
     except Exception as e:
-        logger.error(f"Ошибка отправки email исполнителю: {e}")
+        logger.error(f"❌ Ошибка отправки email исполнителю: {e}")
         return False
+
+def send_event_notification_to_all_participants(event_id, conn, is_new=True):
+    logger.info(f"========== ОТПРАВКА EMAIL ДЛЯ СОБЫТИЯ {event_id} ==========")
+    c = conn.cursor()
+    
+    c.execute("SELECT * FROM calendar_events WHERE id = ?", (event_id,))
+    event = dict(c.fetchone())
+    logger.info(f"Событие: {event.get('title')}")
+    logger.info(f"Дата: {event.get('event_date')}")
+    logger.info(f"Время: {event.get('event_time')}")
+    
+    c.execute("SELECT participant_type, participant_id FROM calendar_event_participants WHERE event_id = ?", (event_id,))
+    participants = c.fetchall()
+    logger.info(f"Найдено участников: {len(participants)}")
+    
+    chat_conn = sqlite3.connect(CHAT_DB_PATH)
+    chat_conn.row_factory = sqlite3.Row
+    chat_c = chat_conn.cursor()
+    
+    for p_type, p_id in participants:
+        logger.info(f"Обработка участника: тип={p_type}, id={p_id}")
+        if p_type == 'user':
+            chat_c.execute("SELECT name, email FROM users WHERE username = ?", (p_id,))
+            user = chat_c.fetchone()
+            if user and user['email']:
+                send_calendar_event_email(user['email'], user['name'] or p_id, event, is_new)
+            else:
+                logger.warning(f"Не найден email для пользователя {p_id}")
+        elif p_type == 'calendar_group':
+            c.execute("SELECT username FROM calendar_group_members WHERE group_id = ?", (p_id,))
+            members = c.fetchall()
+            for member in members:
+                chat_c.execute("SELECT name, email FROM users WHERE username = ?", (member[0],))
+                user = chat_c.fetchone()
+                if user and user['email']:
+                    send_calendar_event_email(user['email'], user['name'] or member[0], event, is_new)
+    
+    chat_conn.close()
+    logger.info(f"========== ОТПРАВКА EMAIL ДЛЯ СОБЫТИЯ {event_id} ЗАВЕРШЕНА ==========")
+
+# ============ НАПОМИНАНИЯ И ТОСТЫ ============
+
+async def create_toast_notification(user_id, event):
+    conn = get_settings_db()
+    c = conn.cursor()
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS toast_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        event_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        event_date TEXT,
+        event_time TEXT,
+        location TEXT,
+        description TEXT,
+        event_type TEXT,
+        remind_before INTEGER,
+        shown INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (event_id) REFERENCES calendar_events(id) ON DELETE CASCADE
+    )''')
+    conn.commit()
+    
+    c.execute("""
+        INSERT INTO toast_notifications (user_id, event_id, title, event_date, event_time, location, description, event_type, remind_before)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (user_id, event['id'], event.get('title'), event.get('event_date'), event.get('event_time'), 
+          event.get('location'), event.get('description'), event.get('event_type'), event.get('remind_before')))
+    conn.commit()
+    conn.close()
+
+async def send_reminder_to_participants(event, participants):
+    logger.info(f"📧 Отправка напоминания для события: {event.get('title')}")
+    chat_conn = get_db()
+    chat_c = chat_conn.cursor()
+    
+    users_data = {}
+    for row in chat_c.execute("SELECT username, name, email FROM users WHERE email IS NOT NULL AND email != ''"):
+        users_data[row['username']] = {'name': row['name'], 'email': row['email']}
+    chat_conn.close()
+    
+    event_date = event.get('event_date')
+    if event_date and '-' in event_date:
+        event_date_display = f"{event_date[8:10]}.{event_date[5:7]}.{event_date[0:4]}"
+    else:
+        event_date_display = event_date
+    
+    event_time = event.get('event_time', '10:00') if not event.get('is_all_day') else 'весь день'
+    remind_before = event.get('remind_before', 0)
+    
+    if remind_before >= 1440:
+        remind_text = f"за {remind_before // 1440} дней"
+    elif remind_before >= 60:
+        remind_text = f"за {remind_before // 60} часов"
+    else:
+        remind_text = f"за {remind_before} минут"
+    
+    event_type_name = get_event_type_name(event.get('event_type', 'meeting'))
+    
+    for p in participants:
+        if p['participant_type'] == 'user':
+            username = p['participant_id']
+            if username in users_data:
+                user = users_data[username]
+                
+                subject = f"🔔 Напоминание о событии: {event.get('title')}"
+                body = f"""<html>
+<body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+    <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+        <div style="background: linear-gradient(135deg, #f59e0b, #d97706); padding: 20px; color: white; text-align: center;">
+            <h2 style="margin: 0; font-size: 24px;">🔔 {event.get('title')}</h2>
+        </div>
+        <div style="padding: 20px;">
+            <p>Уважаемый(ая) <strong>{user['name'] or username}</strong>!</p>
+            <p>Напоминаем вам о предстоящем событии <strong>{remind_text}</strong>.</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+                <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;"><strong>📅 Дата:</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">{event_date_display} {f'в {event_time}' if event_time != 'весь день' else '(весь день)'}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;"><strong>🏷️ Тип:</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">{event_type_name}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;"><strong>📍 Место:</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">{event.get('location') or 'Не указано'}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;"><strong>📝 Описание:</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">{event.get('description') or 'Нет'}</td>
+                </tr>
+            </table>
+            <hr>
+            <p style="text-align: center;">
+                <a href="https://srv-app16.gap-rt.ru" style="display: inline-block; background: #f59e0b; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px;">Перейти в календарь</a>
+            </p>
+            <p style="color: #666; font-size: 12px; text-align: center;">Это автоматическое напоминание. Пожалуйста, не отвечайте на него.</p>
+        </div>
+    </div>
+</body>
+</html>"""
+                
+                try:
+                    msg = MIMEMultipart()
+                    msg['From'] = SMTP_USER
+                    msg['To'] = user['email']
+                    msg['Subject'] = subject
+                    msg.attach(MIMEText(body, 'html'))
+                    
+                    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+                    if SMTP_USER and SMTP_PASSWORD:
+                        server.login(SMTP_USER, SMTP_PASSWORD)
+                    server.send_message(msg)
+                    server.quit()
+                    logger.info(f"✅ Email напоминания отправлен {username} на {user['email']}")
+                except Exception as e:
+                    logger.error(f"❌ Ошибка отправки email {username}: {e}")
+                
+                await create_toast_notification(username, event)
+                logger.info(f"✅ Тост-уведомление создано для {username}")
+
+async def check_and_send_reminders():
+    while True:
+        try:
+            now_local = dt.now()
+            current_time = now_local.strftime('%H:%M')
+            today = now_local.strftime('%Y-%m-%d')
+            
+            # Логируем только если есть события (не каждую минуту)
+            conn = get_settings_db()
+            c = conn.cursor()
+            
+            # Получаем события на сегодня с напоминанием
+            c.execute("""
+                SELECT id, title, event_time, remind_before 
+                FROM calendar_events 
+                WHERE event_date = ? AND remind_before > 0
+            """, (today,))
+            
+            events = c.fetchall()
+            
+            for event_id, title, event_time, remind_before in events:
+                # Проверяем, не отправляли ли уже
+                c.execute("SELECT id FROM reminder_sent WHERE event_id = ? AND remind_before = ?", (event_id, remind_before))
+                if c.fetchone():
+                    continue  # Уже отправлено, пропускаем
+                
+                # Вычисляем время напоминания
+                hour = int(event_time.split(':')[0])
+                minute = int(event_time.split(':')[1]) - remind_before
+                if minute < 0:
+                    hour -= 1
+                    minute += 60
+                reminder_time = f"{hour:02d}:{minute:02d}"
+                
+                # Если время пришло
+                if reminder_time <= current_time:
+                    logger.info(f"📢 Отправляем напоминание для: {title}")
+                    
+                    c.execute("SELECT participant_type, participant_id FROM calendar_event_participants WHERE event_id = ?", (event_id,))
+                    participants = c.fetchall()
+                    
+                    event_dict = {
+                        'id': event_id, 
+                        'title': title, 
+                        'event_time': event_time, 
+                        'remind_before': remind_before,
+                        'event_date': today,
+                        'is_all_day': 0
+                    }
+                    
+                    await send_reminder_to_participants(event_dict, participants)
+                    
+                    # Отмечаем что отправили
+                    c.execute("INSERT INTO reminder_sent (event_id, remind_before) VALUES (?, ?)", (event_id, remind_before))
+                    conn.commit()
+                    logger.info(f"✅ Напоминание для {title} отправлено")
+            
+            conn.close()
+        except Exception as e:
+            logger.error(f"Ошибка: {e}")
+        
+        await asyncio.sleep(60)
+
+# ============ ИНИЦИАЛИЗАЦИЯ БАЗ ДАННЫХ ============
 
 def init_news_db():
     conn = sqlite3.connect(NEWS_DB_PATH)
@@ -124,7 +441,7 @@ def init_chat_db():
     conn = sqlite3.connect(CHAT_DB_PATH)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, name TEXT, department TEXT)")
+    c.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, name TEXT, department TEXT, email TEXT)")
     c.execute("CREATE TABLE IF NOT EXISTS chats (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created_by TEXT NOT NULL, is_general INTEGER DEFAULT 0, created_at TEXT NOT NULL)")
     c.execute("CREATE TABLE IF NOT EXISTS chat_members (chat_id INTEGER, username TEXT, PRIMARY KEY (chat_id, username))")
     c.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, sender_id TEXT, sender_name TEXT, text TEXT, is_file INTEGER DEFAULT 0, file_name TEXT, file_data TEXT, file_type TEXT, edited INTEGER DEFAULT 0, reply_to INTEGER, timestamp TEXT)")
@@ -138,14 +455,14 @@ def init_chat_db():
 def init_settings_db():
     conn = sqlite3.connect(SETTINGS_DB_PATH)
     c = conn.cursor()
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS ad_groups (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         group_name TEXT UNIQUE NOT NULL,
         display_name TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS resource_categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
@@ -155,7 +472,7 @@ def init_settings_db():
         sort_order INTEGER DEFAULT 0,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS category_targets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         category_id INTEGER NOT NULL,
@@ -163,7 +480,7 @@ def init_settings_db():
         target_id TEXT NOT NULL,
         FOREIGN KEY (category_id) REFERENCES resource_categories(id) ON DELETE CASCADE
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS network_resources (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         resource_name TEXT NOT NULL,
@@ -176,7 +493,7 @@ def init_settings_db():
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (category_id) REFERENCES resource_categories(id) ON DELETE SET NULL
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS network_resource_targets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         resource_id INTEGER NOT NULL,
@@ -184,7 +501,7 @@ def init_settings_db():
         target_id TEXT NOT NULL,
         FOREIGN KEY (resource_id) REFERENCES network_resources(id) ON DELETE CASCADE
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS services (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         service_name TEXT NOT NULL,
@@ -194,7 +511,7 @@ def init_settings_db():
         sort_order INTEGER DEFAULT 0,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS service_targets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         service_id INTEGER NOT NULL,
@@ -202,14 +519,14 @@ def init_settings_db():
         target_id TEXT NOT NULL,
         FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS roles (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         role_name TEXT UNIQUE NOT NULL,
         display_name TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS permissions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         permission_key TEXT UNIQUE NOT NULL,
@@ -217,7 +534,7 @@ def init_settings_db():
         module TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS role_permissions (
         role_id INTEGER,
         permission_id INTEGER,
@@ -225,7 +542,7 @@ def init_settings_db():
         FOREIGN KEY (permission_id) REFERENCES permissions(id),
         PRIMARY KEY (role_id, permission_id)
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS user_roles (
         username TEXT NOT NULL,
         role_id INTEGER,
@@ -234,7 +551,7 @@ def init_settings_db():
         FOREIGN KEY (role_id) REFERENCES roles(id),
         PRIMARY KEY (username, role_id)
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS vacation_replacements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         employee_name TEXT NOT NULL,
@@ -248,20 +565,24 @@ def init_settings_db():
         created_by TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS calendar_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         event_date TEXT NOT NULL,
         event_time TEXT DEFAULT '10:00',
+        end_date TEXT,
+        end_time TEXT,
         event_type TEXT DEFAULT 'meeting',
         location TEXT,
         description TEXT,
         is_all_day INTEGER DEFAULT 0,
+        repeat TEXT DEFAULT 'none',
+        remind_before INTEGER DEFAULT 0,
         created_by TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS calendar_event_participants (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         event_id INTEGER NOT NULL,
@@ -269,22 +590,35 @@ def init_settings_db():
         participant_id TEXT NOT NULL,
         FOREIGN KEY (event_id) REFERENCES calendar_events(id) ON DELETE CASCADE
     )''')
-
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS calendar_groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        created_by TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS calendar_group_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id INTEGER NOT NULL,
+        username TEXT NOT NULL,
+        FOREIGN KEY (group_id) REFERENCES calendar_groups(id) ON DELETE CASCADE
+    )''')
+    
     c.execute('''CREATE TABLE IF NOT EXISTS notifications (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         text TEXT NOT NULL,
         created_by TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
-
+    
     c.execute('''CREATE TABLE IF NOT EXISTS organization_tree (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tree_data TEXT NOT NULL,
         updated_by TEXT,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
-
-    # ============ НОВЫЕ ТАБЛИЦЫ ДЛЯ IT-ЗАДАЧ ============
     
     c.execute('''CREATE TABLE IF NOT EXISTS task_categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -318,15 +652,32 @@ def init_settings_db():
         completed_date TEXT,
         is_archived INTEGER DEFAULT 0,
         assigned_email TEXT,
+        monitoring_id INTEGER,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (category_id) REFERENCES task_categories(id) ON DELETE SET NULL,
         FOREIGN KEY (equipment_id) REFERENCES equipment_types(id) ON DELETE SET NULL
     )''')
-
-    # Добавляем роль IT-инженера
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS it_task_monitoring (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title_template TEXT NOT NULL,
+        description_template TEXT,
+        category_id INTEGER,
+        equipment_id INTEGER,
+        assigned_to TEXT,
+        executor TEXT,
+        interval_days INTEGER DEFAULT 30,
+        is_active INTEGER DEFAULT 1,
+        last_run TEXT,
+        next_run TEXT,
+        created_by TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (category_id) REFERENCES task_categories(id) ON DELETE SET NULL,
+        FOREIGN KEY (equipment_id) REFERENCES equipment_types(id) ON DELETE SET NULL
+    )''')
+    
     c.execute("INSERT OR IGNORE INTO roles (role_name, display_name) VALUES ('it_engineer', 'IT-инженер')")
     
-    # Добавляем права для IT-инженера
     it_role = c.execute("SELECT id FROM roles WHERE role_name = 'it_engineer'").fetchone()
     if it_role:
         it_permissions = [
@@ -348,7 +699,6 @@ def init_settings_db():
                 c.execute("INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)", 
                          (it_role[0], perm[0]))
 
-    # Добавляем начальные категории задач
     c.execute("SELECT COUNT(*) FROM task_categories")
     if c.fetchone()[0] == 0:
         default_categories = [
@@ -362,7 +712,6 @@ def init_settings_db():
         for name, color in default_categories:
             c.execute("INSERT INTO task_categories (name, color) VALUES (?, ?)", (name, color))
     
-    # Добавляем начальные типы комплектующих
     c.execute("SELECT COUNT(*) FROM equipment_types")
     if c.fetchone()[0] == 0:
         default_equipment = [
@@ -496,16 +845,83 @@ def migrate_db():
     try:
         c.execute("ALTER TABLE it_tasks ADD COLUMN equipment_id INTEGER")
         c.execute("ALTER TABLE it_tasks ADD COLUMN assigned_email TEXT")
+        c.execute("ALTER TABLE it_tasks ADD COLUMN monitoring_id INTEGER")
     except: pass
+
+    try:
+        c.execute("ALTER TABLE calendar_events ADD COLUMN end_date TEXT")
+    except: pass
+    try:
+        c.execute("ALTER TABLE calendar_events ADD COLUMN end_time TEXT")
+    except: pass
+    try:
+        c.execute("ALTER TABLE calendar_events ADD COLUMN repeat TEXT DEFAULT 'none'")
+    except: pass
+    try:
+        c.execute("ALTER TABLE calendar_events ADD COLUMN remind_before INTEGER DEFAULT 0")
+    except: pass
+
+    try:
+        c.execute('''CREATE TABLE IF NOT EXISTS calendar_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            created_by TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )''')
+        c.execute('''CREATE TABLE IF NOT EXISTS calendar_group_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL,
+            username TEXT NOT NULL,
+            FOREIGN KEY (group_id) REFERENCES calendar_groups(id) ON DELETE CASCADE
+        )''')
+    except: pass
+
+    try:
+        c.execute('''CREATE TABLE IF NOT EXISTS it_task_monitoring (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title_template TEXT NOT NULL,
+            description_template TEXT,
+            category_id INTEGER,
+            equipment_id INTEGER,
+            assigned_to TEXT,
+            executor TEXT,
+            interval_days INTEGER DEFAULT 30,
+            is_active INTEGER DEFAULT 1,
+            last_run TEXT,
+            next_run TEXT,
+            created_by TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (category_id) REFERENCES task_categories(id) ON DELETE SET NULL,
+            FOREIGN KEY (equipment_id) REFERENCES equipment_types(id) ON DELETE SET NULL
+        )''')
+    except: pass
+
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN email TEXT")
+    except:
+        pass
 
     conn.commit()
     conn.close()
     logger.info("Database migration completed")
 
+def add_email_column():
+    conn = sqlite3.connect(CHAT_DB_PATH)
+    c = conn.cursor()
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        logger.info("Колонка email добавлена в таблицу users")
+    except:
+        pass
+    conn.commit()
+    conn.close()
+
 init_news_db()
 init_chat_db()
 init_settings_db()
 migrate_db()
+add_email_column()
 
 # ============ МОДЕЛИ ============
 class LoginRequest(BaseModel):
@@ -582,7 +998,6 @@ async def has_permission(username: str, permission_key: str, user_groups: list =
     return result is not None
 
 def get_user_email_by_name(username: str) -> str:
-    """Получить email пользователя по имени"""
     from server.ad_users import get_all_ad_users
     try:
         all_users = get_all_ad_users()
@@ -592,6 +1007,46 @@ def get_user_email_by_name(username: str) -> str:
     except:
         pass
     return ""
+
+# ============ ФУНКЦИЯ ДЛЯ ДИНАМИЧЕСКИХ ПОВТОРЯЮЩИХСЯ СОБЫТИЙ ============
+def get_recurring_dates(event_date, repeat, start_date, end_date):
+    if repeat == "none":
+        return [event_date]
+    
+    try:
+        start = dt.strptime(start_date, "%Y-%m-%d")
+        end = dt.strptime(end_date, "%Y-%m-%d")
+        current = dt.strptime(event_date, "%Y-%m-%d")
+    except:
+        return [event_date]
+    
+    dates = []
+    if repeat == "daily":
+        delta = timedelta(days=1)
+        while current <= end:
+            if current >= start:
+                dates.append(current.strftime("%Y-%m-%d"))
+            current += delta
+            
+    elif repeat == "weekly":
+        delta = timedelta(weeks=1)
+        while current <= end:
+            if current >= start:
+                dates.append(current.strftime("%Y-%m-%d"))
+            current += delta
+            
+    elif repeat == "monthly":
+        while current <= end:
+            if current >= start:
+                dates.append(current.strftime("%Y-%m-%d"))
+            year = current.year + ((current.month) // 12)
+            month = (current.month % 12) + 1
+            if month == 1:
+                year += 1
+            day = min(current.day, calendar.monthrange(year, month)[1])
+            current = current.replace(year=year, month=month, day=day)
+    
+    return dates if dates else [event_date]
 
 # ============ ЛОГИН ============
 @app.post("/api/auth/login", response_model=LoginResponse)
@@ -605,10 +1060,19 @@ async def login(request: Request):
 
     user_info = user_data['user_info']
     username = user_info["username"]
+    display_name = user_info.get("display_name", username)
+
+    groups = user_data.get('groups', [])
 
     with get_db() as conn:
-        conn.execute("INSERT OR IGNORE INTO users (username, name, department) VALUES (?, ?, ?)",
-                    (username, user_info["display_name"], ""))
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        except:
+            pass
+        user_email = user_info.get("email", "")
+        conn.execute("INSERT OR IGNORE INTO users (username, name, department, email) VALUES (?, ?, ?, ?)",
+                    (username, display_name, "", user_email))
+        conn.execute("UPDATE users SET email = ?, name = ? WHERE username = ?", (user_email, display_name, username))
         general = conn.execute("SELECT id FROM chats WHERE is_general = 1").fetchone()
         if general:
             conn.execute("INSERT OR IGNORE INTO chat_members (chat_id, username) VALUES (?, ?)",
@@ -626,21 +1090,46 @@ async def login(request: Request):
             c.execute("INSERT INTO user_roles (username, role_id, assigned_by) VALUES (?, ?, ?)",
                      (username, user_role[0], "system"))
             logger.info(f"Автоматически назначена роль 'Пользователь' для {username}")
+    
+    role = await get_user_role(username)
     conn.close()
 
     token = create_access_token(data={
         "sub": username,
-        "email": user_info["email"],
-        "display_name": user_info["display_name"],
-        "groups": user_data.get('groups', []),
-        "group": user_data.get('group')
+        "name": display_name,
+        "email": user_info.get("email", ""),
+        "display_name": display_name,
+        "groups": groups,
+        "group": user_data.get('group'),
+        "role": role
     })
 
-    return {"token": token, "token_type": "bearer", "user": {"username": username, "email": user_info["email"], "display_name": user_info["display_name"], "groups": user_data.get('groups', []), "group": user_data.get('group')}}
+    return {
+        "token": token, 
+        "token_type": "bearer", 
+        "user": {
+            "username": username, 
+            "name": display_name,
+            "email": user_info.get("email", ""), 
+            "display_name": display_name, 
+            "groups": groups, 
+            "group": user_data.get('group'),
+            "role": role
+        }
+    }
 
 @app.get("/api/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
-    return {"username": current_user.get("sub"), "email": current_user.get("email"), "display_name": current_user.get("display_name"), "groups": current_user.get("groups", []), "group": current_user.get("group")}
+    username = current_user.get("sub")
+    role = current_user.get("role") or await get_user_role(username)
+    return {
+        "username": username, 
+        "email": current_user.get("email"), 
+        "display_name": current_user.get("display_name") or current_user.get("name", username), 
+        "groups": current_user.get("groups", []), 
+        "group": current_user.get("group"),
+        "role": role
+    }
 
 @app.get("/api/auth/verify")
 async def verify_token(current_user: dict = Depends(get_current_user)):
@@ -861,34 +1350,89 @@ def is_event_visible_for_user(event_id: int, username: str, user_groups: list, c
         if p_type == 'user' and p_id == username:
             return True
         elif p_type == 'group':
-            if (c.execute("SELECT group_name FROM ad_groups WHERE id = ?", (p_id,)).fetchone() or [""])[0] in user_groups:
+            group = c.execute("SELECT group_name FROM ad_groups WHERE id = ?", (p_id,)).fetchone()
+            if group and group[0] in user_groups:
                 return True
     return False
 
 @app.get("/api/calendar/events")
-async def get_calendar_events(current_user: dict = Depends(get_current_user)):
+async def get_calendar_events(
+    request: Request,
+    start_date: str = None,
+    end_date: str = None,
+    current_user: dict = Depends(get_current_user)
+):
     username = current_user.get("sub")
     user_groups = current_user.get("groups", [])
+    
+    if not start_date:
+        start_date = (dt.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    if not end_date:
+        end_date = (dt.now() + timedelta(days=90)).strftime("%Y-%m-%d")
+    
     conn = get_settings_db()
     c = conn.cursor()
-    all_events = [dict(row) for row in c.execute("SELECT * FROM calendar_events ORDER BY event_date ASC").fetchall()]
-    filtered_events = []
+    
+    chat_conn = get_db()
+    chat_c = chat_conn.cursor()
+    users_map = {}
+    for row in chat_c.execute("SELECT username, name FROM users"):
+        users_map[row[0]] = row[1] if row[1] else row[0]
+    chat_conn.close()
+    
+    c.execute("""
+        SELECT id, title, event_date, event_time, end_date, end_time, event_type,
+               location, description, is_all_day, repeat, remind_before, created_by, created_at
+        FROM calendar_events
+        ORDER BY event_date, event_time
+    """)
+    
+    all_events = [dict(row) for row in c.fetchall()]
+    
+    result = []
     for event in all_events:
-        if is_event_visible_for_user(event['id'], username, user_groups, conn):
-            event['participants'] = [dict(row) for row in c.execute("SELECT participant_type, participant_id FROM calendar_event_participants WHERE event_id = ?", (event['id'],)).fetchall()]
-            filtered_events.append(event)
+        if not is_event_visible_for_user(event['id'], username, user_groups, conn):
+            continue
+        
+        participants_raw = c.execute("""
+            SELECT participant_type, participant_id 
+            FROM calendar_event_participants 
+            WHERE event_id = ?
+        """, (event['id'],)).fetchall()
+        
+        participants_with_names = []
+        for p_type, p_id in participants_raw:
+            if p_type == 'user':
+                user_name = users_map.get(p_id, p_id)
+                participants_with_names.append({'type': 'user', 'id': p_id, 'name': user_name})
+            elif p_type == 'group':
+                group = c.execute("SELECT display_name FROM ad_groups WHERE id = ?", (p_id,)).fetchone()
+                group_name = group[0] if group else p_id
+                participants_with_names.append({'type': 'group', 'id': p_id, 'name': f"👥 {group_name}"})
+            elif p_type == 'calendar_group':
+                group = c.execute("SELECT name FROM calendar_groups WHERE id = ?", (p_id,)).fetchone()
+                group_name = group[0] if group else p_id
+                participants_with_names.append({'type': 'calendar_group', 'id': p_id, 'name': f"📅 {group_name}"})
+        
+        event["participants"] = participants_with_names
+        result.append(event)
+    
     conn.close()
-    return {"events": filtered_events}
+    return {"events": result}
 
 @app.post("/api/calendar/events")
 async def add_calendar_event(
     title: str = Form(...),
     event_date: str = Form(...),
     event_time: str = Form("10:00"),
+    end_date: str = Form(None),
+    end_time: str = Form(None),
     event_type: str = Form("meeting"),
     location: str = Form(None),
     description: str = Form(None),
     is_all_day: int = Form(0),
+    repeat: str = Form("none"),
+    remind_before: int = Form(0),
     participants: str = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
@@ -896,18 +1440,33 @@ async def add_calendar_event(
     user_groups = current_user.get("groups", [])
     if not await has_permission(username, "calendar.create", user_groups):
         raise HTTPException(status_code=403, detail="Forbidden")
+    
     conn = get_settings_db()
     c = conn.cursor()
-    c.execute("INSERT INTO calendar_events (title, event_date, event_time, event_type, location, description, is_all_day, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-              (title, event_date, event_time, event_type, location, description, is_all_day, username, dt.now().isoformat()))
+    
+    if is_all_day == 1:
+        event_time = "00:00"
+        end_time = "00:00"
+    
+    c.execute("""INSERT INTO calendar_events 
+                (title, event_date, event_time, end_date, end_time, event_type, location, description, is_all_day, repeat, remind_before, created_by, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+              (title, event_date, event_time, end_date or event_date, end_time, event_type, location, description, is_all_day, repeat, remind_before, username, dt.now().isoformat()))
     event_id = c.lastrowid
+    
     if participants:
         try:
             for p in json.loads(participants):
-                c.execute("INSERT INTO calendar_event_participants (event_id, participant_type, participant_id) VALUES (?, ?, ?)", (event_id, p.get('type'), p.get('id')))
+                c.execute("INSERT INTO calendar_event_participants (event_id, participant_type, participant_id) VALUES (?, ?, ?)", 
+                         (event_id, p.get('type'), p.get('id')))
         except: pass
+    
     conn.commit()
+    
+    send_event_notification_to_all_participants(event_id, conn, is_new=True)
+    
     conn.close()
+    
     return {"id": event_id, "message": "Событие добавлено"}
 
 @app.put("/api/calendar/events/{event_id}")
@@ -916,10 +1475,14 @@ async def update_calendar_event(
     title: str = Form(...),
     event_date: str = Form(...),
     event_time: str = Form("10:00"),
+    end_date: str = Form(None),
+    end_time: str = Form(None),
     event_type: str = Form("meeting"),
     location: str = Form(None),
     description: str = Form(None),
     is_all_day: int = Form(0),
+    repeat: str = Form("none"),
+    remind_before: int = Form(0),
     participants: str = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
@@ -927,23 +1490,39 @@ async def update_calendar_event(
     user_groups = current_user.get("groups", [])
     if not await has_permission(username, "calendar.edit", user_groups):
         raise HTTPException(status_code=403, detail="Forbidden")
+    
     conn = get_settings_db()
     c = conn.cursor()
-    event = c.execute("SELECT created_by FROM calendar_events WHERE id = ?", (event_id,)).fetchone()
+    
+    event = c.execute("SELECT created_by, remind_before FROM calendar_events WHERE id = ?", (event_id,)).fetchone()
     if not event:
         raise HTTPException(status_code=404, detail="Событие не найдено")
     if event[0] != username and not is_admin_by_group(user_groups):
         raise HTTPException(status_code=403, detail="Вы можете редактировать только свои события")
-    c.execute("UPDATE calendar_events SET title=?, event_date=?, event_time=?, event_type=?, location=?, description=?, is_all_day=? WHERE id=?",
-              (title, event_date, event_time, event_type, location, description, is_all_day, event_id))
+    
+    if is_all_day == 1:
+        event_time = "00:00"
+        end_time = "00:00"
+    
+    c.execute("""UPDATE calendar_events 
+                SET title=?, event_date=?, event_time=?, end_date=?, end_time=?, event_type=?, location=?, description=?, is_all_day=?, repeat=?, remind_before=?
+                WHERE id=?""",
+              (title, event_date, event_time, end_date or event_date, end_time, event_type, location, description, is_all_day, repeat, remind_before, event_id))
+    
     c.execute("DELETE FROM calendar_event_participants WHERE event_id = ?", (event_id,))
     if participants:
         try:
             for p in json.loads(participants):
-                c.execute("INSERT INTO calendar_event_participants (event_id, participant_type, participant_id) VALUES (?, ?, ?)", (event_id, p.get('type'), p.get('id')))
+                c.execute("INSERT INTO calendar_event_participants (event_id, participant_type, participant_id) VALUES (?, ?, ?)", 
+                         (event_id, p.get('type'), p.get('id')))
         except: pass
+    
     conn.commit()
+    
+    send_event_notification_to_all_participants(event_id, conn, is_new=False)
+    
     conn.close()
+    
     return {"message": "Событие обновлено"}
 
 @app.delete("/api/calendar/events/{event_id}")
@@ -952,6 +1531,7 @@ async def delete_calendar_event(event_id: int, current_user: dict = Depends(get_
     user_groups = current_user.get("groups", [])
     if not await has_permission(username, "calendar.delete", user_groups):
         raise HTTPException(status_code=403, detail="Forbidden")
+    
     conn = get_settings_db()
     c = conn.cursor()
     event = c.execute("SELECT created_by FROM calendar_events WHERE id = ?", (event_id,)).fetchone()
@@ -959,11 +1539,148 @@ async def delete_calendar_event(event_id: int, current_user: dict = Depends(get_
         raise HTTPException(status_code=404, detail="Событие не найдено")
     if event[0] != username and not is_admin_by_group(user_groups):
         raise HTTPException(status_code=403, detail="Вы можете удалять только свои события")
+    
     c.execute("DELETE FROM calendar_event_participants WHERE event_id = ?", (event_id,))
     c.execute("DELETE FROM calendar_events WHERE id = ?", (event_id,))
     conn.commit()
     conn.close()
     return {"message": "Событие удалено"}
+
+# ============ ГРУППЫ ДЛЯ КАЛЕНДАРЯ ============
+@app.get("/api/calendar/groups")
+async def get_calendar_groups(current_user: dict = Depends(get_current_user)):
+    username = current_user.get("sub")
+    user_groups = current_user.get("groups", [])
+    user_role = await get_user_role(username)
+    
+    if user_role != 'admin' and not is_admin_by_group(user_groups):
+        raise HTTPException(status_code=403, detail="Доступ только для администраторов")
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    
+    groups = [dict(row) for row in c.execute("""
+        SELECT * FROM calendar_groups ORDER BY created_at DESC
+    """).fetchall()]
+    
+    for group in groups:
+        members = c.execute("""
+            SELECT username FROM calendar_group_members WHERE group_id = ?
+        """, (group['id'],)).fetchall()
+        group['members'] = [m[0] for m in members]
+        group['members_count'] = len(members)
+    
+    conn.close()
+    return {"groups": groups}
+
+@app.post("/api/calendar/groups")
+async def create_calendar_group(
+    name: str = Form(...),
+    description: str = Form(None),
+    members: str = Form(None),
+    current_user: dict = Depends(get_current_user)
+):
+    username = current_user.get("sub")
+    user_groups = current_user.get("groups", [])
+    user_role = await get_user_role(username)
+    
+    if user_role != 'admin' and not is_admin_by_group(user_groups):
+        raise HTTPException(status_code=403, detail="Доступ только для администраторов")
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    
+    c.execute("""
+        INSERT INTO calendar_groups (name, description, created_by, created_at)
+        VALUES (?, ?, ?, ?)
+    """, (name, description, username, dt.now().isoformat()))
+    
+    group_id = c.lastrowid
+    
+    if members:
+        try:
+            member_list = json.loads(members)
+            for member in member_list:
+                c.execute("""
+                    INSERT INTO calendar_group_members (group_id, username)
+                    VALUES (?, ?)
+                """, (group_id, member))
+        except: pass
+    
+    conn.commit()
+    conn.close()
+    
+    return {"id": group_id, "message": "Группа создана"}
+
+@app.put("/api/calendar/groups/{group_id}")
+async def update_calendar_group(
+    group_id: int,
+    name: str = Form(...),
+    description: str = Form(None),
+    members: str = Form(None),
+    current_user: dict = Depends(get_current_user)
+):
+    username = current_user.get("sub")
+    user_groups = current_user.get("groups", [])
+    user_role = await get_user_role(username)
+    
+    if user_role != 'admin' and not is_admin_by_group(user_groups):
+        raise HTTPException(status_code=403, detail="Доступ только для администраторов")
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    
+    c.execute("""
+        UPDATE calendar_groups SET name=?, description=?
+        WHERE id=?
+    """, (name, description, group_id))
+    
+    c.execute("DELETE FROM calendar_group_members WHERE group_id = ?", (group_id,))
+    
+    if members:
+        try:
+            member_list = json.loads(members)
+            for member in member_list:
+                c.execute("""
+                    INSERT INTO calendar_group_members (group_id, username)
+                    VALUES (?, ?)
+                """, (group_id, member))
+        except: pass
+    
+    conn.commit()
+    conn.close()
+    
+    return {"message": "Группа обновлена"}
+
+@app.delete("/api/calendar/groups/{group_id}")
+async def delete_calendar_group(group_id: int, current_user: dict = Depends(get_current_user)):
+    username = current_user.get("sub")
+    user_groups = current_user.get("groups", [])
+    user_role = await get_user_role(username)
+    
+    if user_role != 'admin' and not is_admin_by_group(user_groups):
+        raise HTTPException(status_code=403, detail="Доступ только для администраторов")
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    
+    c.execute("DELETE FROM calendar_group_members WHERE group_id = ?", (group_id,))
+    c.execute("DELETE FROM calendar_groups WHERE id = ?", (group_id,))
+    
+    conn.commit()
+    conn.close()
+    
+    return {"message": "Группа удалена"}
+
+@app.get("/api/calendar/available-users")
+async def get_available_users(current_user: dict = Depends(get_current_user)):
+    conn = get_db()
+    c = conn.cursor()
+    users = [dict(row) for row in c.execute("""
+        SELECT username, name as display_name FROM users ORDER BY name
+    """).fetchall()]
+    conn.close()
+    return {"users": users}
 
 # ============ СТРУКТУРА ОРГАНИЗАЦИИ ============
 @app.get("/api/admin/organization-tree")
@@ -1056,28 +1773,32 @@ async def get_users_with_roles(current_user: dict = Depends(get_current_user)):
     user_groups = current_user.get("groups", [])
     if not await has_permission(username, "users.manage", user_groups):
         raise HTTPException(status_code=403, detail="Forbidden")
-    from server.ad_users import get_all_ad_users
-    try:
-        ad_users = get_all_ad_users()
-    except Exception as e:
-        logger.error(f"AD get users error: {e}")
-        return {"users": [], "roles": []}
-    conn = get_settings_db()
+    
+    conn = get_db()
     c = conn.cursor()
-    user_roles = {row[0]: {"role": row[1], "assigned_by": row[2]} for row in c.execute("SELECT ur.username, r.role_name, ur.assigned_by FROM user_roles ur JOIN roles r ON ur.role_id = r.id").fetchall()}
-    roles = [dict(row) for row in c.execute("SELECT id, role_name, display_name FROM roles").fetchall()]
+    db_users = c.execute("SELECT username, name FROM users ORDER BY name").fetchall()
     conn.close()
+    
+    conn2 = get_settings_db()
+    c2 = conn2.cursor()
+    
+    user_roles = {}
+    for row in c2.execute("SELECT ur.username, r.role_name FROM user_roles ur JOIN roles r ON ur.role_id = r.id").fetchall():
+        user_roles[row[0]] = row[1]
+    
+    roles = [dict(row) for row in c2.execute("SELECT id, role_name, display_name FROM roles").fetchall()]
+    conn2.close()
+    
     users_list = []
-    for ad_user in ad_users:
-        ad_username = ad_user.get('username')
-        if ad_username:
-            users_list.append({
-                "username": ad_username,
-                "name": ad_user.get('name') or ad_username,
-                "email": ad_user.get('email', ''),
-                "role": user_roles.get(ad_username, {}).get("role", "user"),
-                "assigned_by": user_roles.get(ad_username, {}).get("assigned_by")
-            })
+    for db_user in db_users:
+        users_list.append({
+            "username": db_user[0],
+            "name": db_user[1] or db_user[0],
+            "email": "",
+            "role": user_roles.get(db_user[0], "user"),
+            "assigned_by": None
+        })
+    
     return {"users": users_list, "roles": roles}
 
 @app.post("/api/admin/users/{username}/role")
@@ -1099,7 +1820,6 @@ async def assign_user_role(username: str, role_name: str = Form(...), current_us
 
 @app.get("/api/admin/ad-users")
 async def search_ad_users(query: str = "", limit: int = 100, current_user: dict = Depends(get_current_user)):
-    """Поиск пользователей в AD - доступен всем авторизованным пользователям"""
     from server.ad_users import get_all_ad_users
     try:
         all_users = get_all_ad_users()
@@ -1125,21 +1845,17 @@ async def search_ad_users(query: str = "", limit: int = 100, current_user: dict 
         logger.error(f"Search error: {e}")
         return {"users": [], "total": 0, "error": str(e)}
 
-# ============ НОВЫЙ ЭНДПОИНТ: ПОИСК ТОЛЬКО СРЕДИ АВТОРИЗОВАННЫХ ПОЛЬЗОВАТЕЛЕЙ ============
 @app.get("/api/users/authorized")
 async def get_authorized_users(query: str = "", limit: int = 50, current_user: dict = Depends(get_current_user)):
-    """Поиск только среди пользователей, которые авторизовались на портале"""
     import urllib.parse
     conn = get_db()
     c = conn.cursor()
     
-    # Декодируем query
     try:
         query = urllib.parse.unquote(query)
     except:
         pass
     
-    # Получаем всех пользователей
     users = c.execute("""
         SELECT username, name as display_name, '' as email 
         FROM users 
@@ -1198,8 +1914,9 @@ async def add_category(name: str = Form(...), description: str = Form(None), ico
     c = conn.cursor()
     c.execute("INSERT INTO resource_categories (name, description, icon, is_global, sort_order) VALUES (?, ?, ?, ?, ?)", (name, description, icon, is_global, sort_order))
     conn.commit()
+    category_id = c.lastrowid
     conn.close()
-    return {"message": "Категория добавлена"}
+    return {"id": category_id, "message": "Категория добавлена"}
 
 @app.put("/api/admin/resource-categories/{category_id}")
 async def update_category(category_id: int, name: str = Form(...), description: str = Form(None), icon: str = Form("📁"), is_global: int = Form(0), sort_order: int = Form(0), current_user: dict = Depends(get_current_user)):
@@ -1527,21 +2244,18 @@ async def delete_service_target(service_id: int, target_id: int, current_user: d
     return {"message": "Target deleted successfully"}
 
 # ============ API ДЛЯ IT-ЗАДАЧ ============
-
 @app.get("/api/it-tasks")
 async def get_user_it_tasks(archived: bool = False, current_user: dict = Depends(get_current_user)):
     username = current_user.get("sub")
     user_groups = current_user.get("groups", [])
     user_role = await get_user_role(username)
     
-    # Проверка доступа
     if user_role not in ['admin', 'it_engineer'] and not is_admin_by_group(user_groups):
         raise HTTPException(status_code=403, detail="Forbidden")
     
     conn = get_settings_db()
     c = conn.cursor()
     
-    # Для администратора показываем все задачи
     if user_role == 'admin' or is_admin_by_group(user_groups):
         tasks = [dict(row) for row in c.execute("""
             SELECT t.*, tc.name as category_name, tc.color as category_color, et.name as equipment_name
@@ -1552,7 +2266,6 @@ async def get_user_it_tasks(archived: bool = False, current_user: dict = Depends
             ORDER BY t.created_date DESC
         """, (1 if archived else 0,)).fetchall()]
     else:
-        # Для IT-инженера — только его задачи (где он исполнитель)
         tasks = [dict(row) for row in c.execute("""
             SELECT t.*, tc.name as category_name, tc.color as category_color, et.name as equipment_name
             FROM it_tasks t
@@ -1582,10 +2295,10 @@ async def create_it_task(
     user_role = await get_user_role(username)
     if user_role not in ['admin', 'it_engineer'] and not is_admin_by_group(user_groups):
         raise HTTPException(status_code=403, detail="Forbidden")
+    
     conn = get_settings_db()
     c = conn.cursor()
     
-    # Email отправляется ТОЛЬКО исполнителю
     executor_email = None
     if executor:
         executor_email = get_user_email_by_name(executor)
@@ -1600,7 +2313,6 @@ async def create_it_task(
     conn.commit()
     conn.close()
     
-    # Отправляем email ТОЛЬКО исполнителю, если указан и email найден
     if executor and executor_email:
         send_task_email(executor_email, executor, title, description, due_date, task_id)
     elif executor and not executor_email:
@@ -1627,6 +2339,7 @@ async def update_it_task(
     user_role = await get_user_role(username)
     if user_role not in ['admin', 'it_engineer'] and not is_admin_by_group(user_groups):
         raise HTTPException(status_code=403, detail="Forbidden")
+    
     conn = get_settings_db()
     c = conn.cursor()
     updates = []
@@ -1664,7 +2377,6 @@ async def update_it_task(
 
 @app.post("/api/it-tasks/{task_id}/restore")
 async def restore_it_task(task_id: int, current_user: dict = Depends(get_current_user)):
-    """Восстановление задачи из архива"""
     username = current_user.get("sub")
     user_groups = current_user.get("groups", [])
     user_role = await get_user_role(username)
@@ -1685,6 +2397,7 @@ async def delete_it_task(task_id: int, current_user: dict = Depends(get_current_
     user_role = await get_user_role(username)
     if user_role not in ['admin', 'it_engineer'] and not is_admin_by_group(user_groups):
         raise HTTPException(status_code=403, detail="Forbidden")
+    
     conn = get_settings_db()
     c = conn.cursor()
     c.execute("DELETE FROM it_tasks WHERE id = ?", (task_id,))
@@ -1698,7 +2411,6 @@ async def generate_tasks_report(
     end_date: str = Form(...),
     current_user: dict = Depends(get_current_user)
 ):
-    """Генерация отчета по задачам за период в формате Excel"""
     username = current_user.get("sub")
     user_groups = current_user.get("groups", [])
     user_role = await get_user_role(username)
@@ -1796,8 +2508,7 @@ async def get_task_categories_public(current_user: dict = Depends(get_current_us
     conn.close()
     return {"categories": categories}
 
-# ============ API ДЛЯ КОМПЛЕКТУЮЩИХ (АДМИНКА) ============
-
+# ============ API ДЛЯ КОМПЛЕКТУЮЩИХ ============
 @app.get("/api/admin/equipment-types")
 async def get_equipment_types(current_user: dict = Depends(get_current_user)):
     username = current_user.get("sub")
@@ -1851,6 +2562,222 @@ async def delete_equipment_type(type_id: int, current_user: dict = Depends(get_c
     conn.close()
     return {"message": "Тип удалён"}
 
+# ============ API ДЛЯ МОНИТОРИНГА IT-ЗАДАЧ ============
+@app.get("/api/it-tasks/monitoring")
+async def get_monitoring_tasks(current_user: dict = Depends(get_current_user)):
+    username = current_user.get("sub")
+    user_groups = current_user.get("groups", [])
+    user_role = await get_user_role(username)
+    
+    if user_role not in ['admin', 'it_engineer'] and not is_admin_by_group(user_groups):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    
+    monitoring = [dict(row) for row in c.execute("""
+        SELECT m.*, tc.name as category_name, tc.color as category_color, et.name as equipment_name
+        FROM it_task_monitoring m
+        LEFT JOIN task_categories tc ON m.category_id = tc.id
+        LEFT JOIN equipment_types et ON m.equipment_id = et.id
+        ORDER BY m.created_at DESC
+    """).fetchall()]
+    
+    conn.close()
+    return {"monitoring_tasks": monitoring}
+
+@app.post("/api/it-tasks/monitoring")
+async def create_monitoring_task(request: Request, current_user: dict = Depends(get_current_user)):
+    username = current_user.get("sub")
+    user_groups = current_user.get("groups", [])
+    user_role = await get_user_role(username)
+    
+    if user_role not in ['admin', 'it_engineer'] and not is_admin_by_group(user_groups):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    data = await request.json()
+    
+    interval_days = data.get("interval_days", 30)
+    next_run = (dt.now() + timedelta(days=interval_days)).strftime("%Y-%m-%d")
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    
+    c.execute("""
+        INSERT INTO it_task_monitoring 
+        (title_template, description_template, category_id, equipment_id, 
+         assigned_to, executor, interval_days, is_active, next_run, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        data.get("title_template"),
+        data.get("description_template"),
+        data.get("category_id"),
+        data.get("equipment_id"),
+        data.get("assigned_to"),
+        data.get("executor"),
+        interval_days,
+        1 if data.get("is_active") else 0,
+        next_run,
+        username
+    ))
+    
+    conn.commit()
+    monitoring_id = c.lastrowid
+    conn.close()
+    
+    return {"id": monitoring_id, "message": "Мониторинг создан"}
+
+@app.put("/api/it-tasks/monitoring/{monitoring_id}")
+async def update_monitoring_task(monitoring_id: int, request: Request, current_user: dict = Depends(get_current_user)):
+    username = current_user.get("sub")
+    user_groups = current_user.get("groups", [])
+    user_role = await get_user_role(username)
+    
+    if user_role not in ['admin', 'it_engineer'] and not is_admin_by_group(user_groups):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    data = await request.json()
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    
+    c.execute("""
+        UPDATE it_task_monitoring 
+        SET title_template = ?, description_template = ?, category_id = ?, 
+            equipment_id = ?, assigned_to = ?, executor = ?, 
+            interval_days = ?, is_active = ?
+        WHERE id = ?
+    """, (
+        data.get("title_template"),
+        data.get("description_template"),
+        data.get("category_id"),
+        data.get("equipment_id"),
+        data.get("assigned_to"),
+        data.get("executor"),
+        data.get("interval_days", 30),
+        1 if data.get("is_active") else 0,
+        monitoring_id
+    ))
+    
+    conn.commit()
+    conn.close()
+    
+    return {"message": "Мониторинг обновлён"}
+
+@app.delete("/api/it-tasks/monitoring/{monitoring_id}")
+async def delete_monitoring_task(monitoring_id: int, current_user: dict = Depends(get_current_user)):
+    username = current_user.get("sub")
+    user_groups = current_user.get("groups", [])
+    user_role = await get_user_role(username)
+    
+    if user_role not in ['admin', 'it_engineer'] and not is_admin_by_group(user_groups):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    
+    c.execute("SELECT id FROM it_task_monitoring WHERE id = ?", (monitoring_id,))
+    if not c.fetchone():
+        raise HTTPException(status_code=404, detail="Мониторинг не найден")
+    
+    c.execute("DELETE FROM it_task_monitoring WHERE id = ?", (monitoring_id,))
+    conn.commit()
+    conn.close()
+    
+    return {"message": "Мониторинг удалён"}
+
+@app.post("/api/it-tasks/monitoring/{monitoring_id}/toggle")
+async def toggle_monitoring(monitoring_id: int, current_user: dict = Depends(get_current_user)):
+    username = current_user.get("sub")
+    user_groups = current_user.get("groups", [])
+    user_role = await get_user_role(username)
+    
+    if user_role not in ['admin', 'it_engineer'] and not is_admin_by_group(user_groups):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    
+    c.execute("SELECT is_active FROM it_task_monitoring WHERE id = ?", (monitoring_id,))
+    row = c.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Мониторинг не найден")
+    
+    new_status = 0 if row[0] else 1
+    c.execute("UPDATE it_task_monitoring SET is_active = ? WHERE id = ?", (new_status, monitoring_id))
+    conn.commit()
+    conn.close()
+    
+    return {"is_active": new_status, "message": "Статус изменён"}
+
+@app.post("/api/it-tasks/monitoring/{monitoring_id}/run")
+async def run_monitoring_now(monitoring_id: int, current_user: dict = Depends(get_current_user)):
+    username = current_user.get("sub")
+    user_groups = current_user.get("groups", [])
+    user_role = await get_user_role(username)
+    
+    if user_role not in ['admin', 'it_engineer'] and not is_admin_by_group(user_groups):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    
+    c.execute("""
+        SELECT title_template, description_template, category_id, equipment_id,
+               assigned_to, executor, interval_days
+        FROM it_task_monitoring WHERE id = ?
+    """, (monitoring_id,))
+    row = c.fetchone()
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="Мониторинг не найден")
+    
+    title = row[0]
+    if "{date}" in title:
+        title = title.replace("{date}", dt.now().strftime("%d.%m.%Y"))
+    if "{DATE}" in title:
+        title = title.replace("{DATE}", dt.now().strftime("%d.%m.%Y"))
+    
+    executor_email = None
+    if row[5]:
+        executor_email = get_user_email_by_name(row[5])
+    
+    c.execute("""
+        INSERT INTO it_tasks 
+        (title, description, category_id, equipment_id, assigned_to, executor, 
+         components_status, monitoring_id, created_by, created_date, assigned_email)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        title,
+        row[1],
+        row[2],
+        row[3],
+        row[4],
+        row[5],
+        "missing",
+        monitoring_id,
+        username,
+        dt.now().isoformat(),
+        executor_email
+    ))
+    
+    task_id = c.lastrowid
+    
+    next_run = (dt.now() + timedelta(days=row[6])).strftime("%Y-%m-%d")
+    c.execute("""
+        UPDATE it_task_monitoring 
+        SET last_run = date('now'), next_run = ?
+        WHERE id = ?
+    """, (next_run, monitoring_id))
+    
+    conn.commit()
+    conn.close()
+    
+    if row[5] and executor_email:
+        send_task_email(executor_email, row[5], title, row[1], None, task_id)
+    
+    return {"task_id": task_id, "message": "Задача создана"}
+
 # ============ АДМИНИСТРИРОВАНИЕ ============
 @app.get("/api/admin/reset-chats")
 async def reset_all_chats(current_user: dict = Depends(get_current_user)):
@@ -1875,6 +2802,66 @@ async def reset_all_chats(current_user: dict = Depends(get_current_user)):
 async def health():
     return {"status": "ok", "timestamp": dt.now().isoformat()}
 
+# ============ API ДЛЯ ТОСТ-УВЕДОМЛЕНИЙ ============
+
+@app.get("/api/notifications/toast")
+async def get_toast_notifications(current_user: dict = Depends(get_current_user)):
+    username = current_user.get("sub")
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS toast_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        event_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        event_date TEXT,
+        event_time TEXT,
+        location TEXT,
+        description TEXT,
+        event_type TEXT,
+        remind_before INTEGER,
+        shown INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (event_id) REFERENCES calendar_events(id) ON DELETE CASCADE
+    )''')
+    conn.commit()
+    
+    c.execute("""
+        SELECT id, event_id, title, event_date, event_time, location, description, event_type, remind_before
+        FROM toast_notifications
+        WHERE user_id = ? AND shown = 0
+        ORDER BY created_at ASC
+    """, (username,))
+    
+    notifications = [dict(row) for row in c.fetchall()]
+    conn.close()
+    
+    return {"notifications": notifications}
+
+@app.put("/api/notifications/toast/{notification_id}/shown")
+async def mark_toast_shown(notification_id: int, current_user: dict = Depends(get_current_user)):
+    username = current_user.get("sub")
+    
+    conn = get_settings_db()
+    c = conn.cursor()
+    c.execute("""
+        UPDATE toast_notifications
+        SET shown = 1
+        WHERE id = ? AND user_id = ?
+    """, (notification_id, username))
+    conn.commit()
+    conn.close()
+    
+    return {"message": "ok"}
+
+@app.on_event("startup")
+async def start_reminder_task():
+    asyncio.create_task(check_and_send_reminders())
+    logger.info("✅ Фоновая задача отправки напоминаний запущена")
+
+# ============ ЗАПУСК ============
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Plus, X, Trash2, Edit2, RefreshCw, Save } from "lucide-react";
 
-const ITEquipment = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
+const ITEquipment = ({ getToken, showMessage, userRole, isAdminByGroup, darkMode }) => {
   const [equipmentTypes, setEquipmentTypes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -98,9 +98,9 @@ const ITEquipment = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
 
   if (!canManage) {
     return (
-      <div style={{ textAlign: "center", padding: 60 }}>
+      <div style={{ textAlign: "center", padding: 60, color: darkMode ? "#f1f5f9" : "#1e293b" }}>
         <h2>Доступ запрещен</h2>
-        <p style={{ color: "#64748b" }}>Только IT-инженеры и администраторы могут управлять комплектующими</p>
+        <p style={{ color: darkMode ? "#94a3b8" : "#64748b" }}>Только IT-инженеры и администраторы могут управлять комплектующими</p>
       </div>
     );
   }
@@ -115,30 +115,96 @@ const ITEquipment = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
   };
 
   const styles = {
-    card: { background: "white", borderRadius: 16, border: "1px solid #e2e8f0", overflow: "hidden" },
+    card: { 
+      background: darkMode ? "#1e293b" : "white", 
+      borderRadius: 16, 
+      border: darkMode ? "1px solid #475569" : "1px solid #e2e8f0", 
+      overflow: "hidden" 
+    },
     cardHeader: {
       padding: "16px 20px",
-      borderBottom: "1px solid #e2e8f0",
+      borderBottom: darkMode ? "1px solid #475569" : "1px solid #e2e8f0",
       display: "flex",
       justifyContent: "space-between",
       alignItems: "center",
-      background: "#f8fafc",
+      background: darkMode ? "#0f172a" : "#f8fafc",
       flexWrap: "wrap",
-      gap: 10
+      gap: 10,
+      color: darkMode ? "#f1f5f9" : "#1e293b"
     },
     table: { width: "100%", borderCollapse: "collapse" },
-    th: { textAlign: "left", padding: "12px 16px", borderBottom: "1px solid #e2e8f0", fontWeight: 600, fontSize: 13 },
-    td: { padding: "12px 16px", borderBottom: "1px solid #e2e8f0", fontSize: 13 },
-    buttonPrimary: { background: "#3b82f6", color: "white", border: "none", padding: "6px 12px", borderRadius: 6, cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 },
-    buttonIcon: { background: "none", border: "none", cursor: "pointer", padding: 4, borderRadius: 6, display: "inline-flex", alignItems: "center" },
-    input: { width: "100%", padding: "8px 12px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, boxSizing: "border-box" },
-    select: { width: "100%", padding: "8px 12px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, background: "white" },
+    th: { 
+      textAlign: "left", 
+      padding: "12px 16px", 
+      borderBottom: darkMode ? "1px solid #475569" : "1px solid #e2e8f0", 
+      fontWeight: 600, 
+      fontSize: 13,
+      color: darkMode ? "#f1f5f9" : "#1e293b"
+    },
+    td: { 
+      padding: "12px 16px", 
+      borderBottom: darkMode ? "1px solid #334155" : "1px solid #e2e8f0", 
+      fontSize: 13,
+      color: darkMode ? "#cbd5e1" : "#1e293b"
+    },
+    buttonPrimary: { 
+      background: "#3b82f6", 
+      color: "white", 
+      border: "none", 
+      padding: "6px 12px", 
+      borderRadius: 6, 
+      cursor: "pointer", 
+      fontSize: 12, 
+      display: "inline-flex", 
+      alignItems: "center", 
+      gap: 4 
+    },
+    buttonIcon: { 
+      background: "none", 
+      border: "none", 
+      cursor: "pointer", 
+      padding: 4, 
+      borderRadius: 6, 
+      display: "inline-flex", 
+      alignItems: "center",
+      color: darkMode ? "#94a3b8" : "#64748b"
+    },
+    input: {
+      width: "100%",
+      padding: "8px 12px",
+      border: darkMode ? "1px solid #475569" : "1px solid #e2e8f0",
+      borderRadius: 8,
+      fontSize: 13,
+      boxSizing: "border-box",
+      background: darkMode ? "#0f172a" : "white",
+      color: darkMode ? "#f1f5f9" : "#1e293b"
+    },
+    select: {
+      width: "100%",
+      padding: "8px 12px",
+      border: darkMode ? "1px solid #475569" : "1px solid #e2e8f0",
+      borderRadius: 8,
+      fontSize: 13,
+      background: darkMode ? "#0f172a" : "white",
+      color: darkMode ? "#f1f5f9" : "#1e293b"
+    },
     modal: {
       position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-      background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)",
-      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000
+      background: "rgba(0,0,0,0.5)",
+      backdropFilter: "blur(4px)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1000
     },
-    modalContent: { background: "white", borderRadius: 20, padding: 24, width: 450, maxWidth: "90%" },
+    modalContent: { 
+      background: darkMode ? "#1e293b" : "white", 
+      borderRadius: 20, 
+      padding: 24, 
+      width: 450, 
+      maxWidth: "90%",
+      color: darkMode ? "#f1f5f9" : "#1e293b"
+    },
     badge: { display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500 },
     badgePc: { background: "#3b82f620", color: "#3b82f6" },
     badgePrinter: { background: "#10b98120", color: "#10b981" },
@@ -149,7 +215,7 @@ const ITEquipment = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
     <div>
       <div style={styles.card}>
         <div style={styles.cardHeader}>
-          <h3 style={{ margin: 0, fontSize: 16 }}>🔧 Типы комплектующих</h3>
+          <h3 style={{ margin: 0, fontSize: 16, color: darkMode ? "#f1f5f9" : "#1e293b" }}>🔧 Типы комплектующих</h3>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={fetchEquipmentTypes} style={styles.buttonIcon} title="Обновить">
               <RefreshCw size={16} />
@@ -161,9 +227,9 @@ const ITEquipment = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
         </div>
         
         {loading ? (
-          <div style={{ padding: 40, textAlign: "center" }}>Загрузка...</div>
+          <div style={{ padding: 40, textAlign: "center", color: darkMode ? "#94a3b8" : "#64748b" }}>Загрузка...</div>
         ) : equipmentTypes.length === 0 ? (
-          <div style={{ padding: 60, textAlign: "center", color: "#64748b" }}>
+          <div style={{ padding: 60, textAlign: "center", color: darkMode ? "#94a3b8" : "#64748b" }}>
             <p>Нет типов комплектующих</p>
           </div>
         ) : (
@@ -204,11 +270,18 @@ const ITEquipment = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
       </div>
 
       {showForm && (
-        <div style={styles.modal} onClick={() => setShowForm(false)}>
-          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+        <div 
+          style={styles.modal} 
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowForm(false);
+            }
+          }}
+        >
+          <div style={styles.modalContent} onMouseDown={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-              <h3>{editingItem ? "✏️ Редактировать тип" : "➕ Новый тип"}</h3>
-              <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer" }}>✕</button>
+              <h3 style={{ color: darkMode ? "#f1f5f9" : "#1e293b" }}>{editingItem ? "✏️ Редактировать тип" : "➕ Новый тип"}</h3>
+              <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: darkMode ? "#94a3b8" : "#64748b" }}>✕</button>
             </div>
             
             <input
@@ -238,7 +311,7 @@ const ITEquipment = ({ getToken, showMessage, userRole, isAdminByGroup }) => {
             />
             
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
-              <button onClick={() => setShowForm(false)} style={{ padding: "8px 20px", border: "1px solid #e2e8f0", borderRadius: 8, background: "white", cursor: "pointer" }}>
+              <button onClick={() => setShowForm(false)} style={{ padding: "8px 20px", border: darkMode ? "1px solid #475569" : "1px solid #e2e8f0", borderRadius: 8, background: darkMode ? "#0f172a" : "white", cursor: "pointer", color: darkMode ? "#f1f5f9" : "#1e293b" }}>
                 Отмена
               </button>
               <button onClick={saveItem} style={{ background: "#3b82f6", color: "white", border: "none", padding: "8px 20px", borderRadius: 8, cursor: "pointer" }}>

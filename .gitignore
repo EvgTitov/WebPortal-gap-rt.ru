@@ -48,3 +48,10 @@ desktop.ini
 backend/ad_auth.py
 backend/server/ad_users.py
 backend/server/ad_users.py~*
+
+# Local documentation and screenshots
+README.md
+images/
+*.png
+*.jpg
+*.jpeg
