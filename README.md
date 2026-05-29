@@ -126,37 +126,35 @@
 
 ---
 
-text
 ## 📁 Структура проекта
+```
 webportal/
 ├── backend/
-│ ├── main.py
-│ ├── ad_auth.py
-│ ├── server/
-│ │ └── ad_users.py
-│ ├── uploads/ (не в Git)
-│ ├── settings.db (не в Git)
-│ ├── news.db (не в Git)
-│ └── chat.db (не в Git)
+│   ├── main.py
+│   ├── ad_auth.py
+│   ├── server/
+│   │   └── ad_users.py
+│   ├── uploads/          (не в Git)
+│   ├── settings.db       (не в Git)
+│   ├── news.db           (не в Git)
+│   └── chat.db           (не в Git)
 ├── frontend/
-│ ├── src/
-│ │ ├── pages/
-│ │ │ ├── MainPage.jsx
-│ │ │ ├── AdminPanel.jsx
-│ │ │ ├── ITTasks.jsx
-│ │ │ ├── ITMonitoring.jsx
-│ │ │ ├── PeriodicTasks.jsx
-│ │ │ └── ITEquipment.jsx
-│ │ ├── auth/
-│ │ │ └── AuthContext.jsx
-│ │ ├── components/
-│ │ │ └── UserSearchInput.jsx
-│ │ └── index.css
-│ └── dist/ (не в Git)
-└── images/ (скриншоты)
-
-text
-
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── MainPage.jsx
+│   │   │   ├── AdminPanel.jsx
+│   │   │   ├── ITTasks.jsx
+│   │   │   ├── ITMonitoring.jsx
+│   │   │   ├── PeriodicTasks.jsx
+│   │   │   └── ITEquipment.jsx
+│   │   ├── auth/
+│   │   │   └── AuthContext.jsx
+│   │   ├── components/
+│   │   │   └── UserSearchInput.jsx
+│   │   └── index.css
+│   └── dist/             (не в Git)
+└── images/               (скриншоты)
+```
 
 ---
 
