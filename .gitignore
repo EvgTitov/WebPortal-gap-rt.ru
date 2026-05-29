@@ -55,3 +55,5 @@ images/
 *.png
 *.jpg
 *.jpeg
+backend/server/ad_users.py_hiden
+backend/server/ad_users.py
