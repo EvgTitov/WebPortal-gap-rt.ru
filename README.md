@@ -200,6 +200,10 @@ webportal/
 ![События](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/События.png)
 
 ### 🔄 Замены на отпуск
+![Замены на отпуск](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/Змены%20сотрудников.png)
+
+### 💬 Чат
+![Чат](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/Чат.png)
 
 ### 🌓 Тёмная тема
 ![Тёмная тема](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/Темная%20Тема.png)
@@ -209,7 +213,3 @@ webportal/
 
 ### 🔄 Периодические задачи
 ![Периодические задачи](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/Переодические%20задачи.png)
-![Замены](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/Змены%20сотрудников.png)
-
-### 💬 Чат
-![Чат](https://raw.githubusercontent.com/EvgTitov/WebPortal-gap-rt.ru/main/images/Чат.png)
