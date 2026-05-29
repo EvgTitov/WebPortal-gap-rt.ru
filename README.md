@@ -127,7 +127,6 @@
 ---
 
 ## Структура проекта
-webportal/
 ├── backend/
 │ ├── main.py
 │ ├── ad_auth.py
